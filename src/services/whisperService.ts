@@ -3,7 +3,7 @@
  * Supports local offline ASR execution and unified pipeline with Ollama
  */
 
-const BACKEND_BASE = 'http://127.0.0.1:8000';
+const BACKEND_BASE = (import.meta as any).env?.VITE_BACKEND_URL || 'https://mindmesh-nexus.onrender.com';
 
 export interface WhisperTranscriptionResult {
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
@@ -129,16 +129,31 @@ class WhisperService {
     try {
       const cleanB64 = audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64;
       const targetOllama = (ollamaModel && ollamaModel !== 'llama3.2') ? ollamaModel : 'qwen2.5:3b';
-      const resp = await fetch(`${BACKEND_BASE}/api/whisper/voice-pipeline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio_base64: cleanB64,
-          language: language === 'Bilingual' ? 'en' : (language === 'Hindi' ? 'hi' : 'en'),
-          whisper_model: whisperModel,
-          ollama_model: targetOllama
-        })
+      const payload = JSON.stringify({
+        audio_base64: cleanB64,
+        language: language === 'Bilingual' ? 'en' : (language === 'Hindi' ? 'hi' : 'en'),
+        whisper_model: whisperModel,
+        ollama_model: targetOllama
       });
+
+      let resp: Response | null = null;
+      try {
+        resp = await fetch('/api/whisper/voice-pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      } catch {
+        // Fallback to direct BACKEND_BASE
+      }
+
+      if (!resp || !resp.ok) {
+        resp = await fetch(`${BACKEND_BASE}/api/whisper/voice-pipeline`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      }
 
       if (resp.ok) {
         return await resp.json();

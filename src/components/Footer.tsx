@@ -135,7 +135,7 @@ export const Footer: React.FC = () => {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-1.5 font-mono text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>API Gateway: 127.0.0.1:8000 (OPERATIONAL)</span>
+              <span>API Gateway: Render Cloud Brain (OPERATIONAL)</span>
             </div>
             
             <a 

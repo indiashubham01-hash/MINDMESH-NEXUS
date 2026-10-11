@@ -336,7 +336,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       <div>
                         <div className="font-semibold">FastAPI Brain</div>
-                        <div className="text-[10px] text-slate-500">Port :8000 GNN Engine</div>
+                        <div className="text-[10px] text-slate-500">Render Cloud GNN Engine</div>
                       </div>
                     </div>
                     <span className="px-1.5 py-0.5 rounded bg-slate-200 text-[9px] text-slate-700 font-mono font-bold">Live</span>

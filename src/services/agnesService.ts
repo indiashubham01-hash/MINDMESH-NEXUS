@@ -16,7 +16,7 @@ export interface AgnesSystemMetrics {
 }
 
 class FrontendAgnesService {
-  private baseBackendUrl = 'http://localhost:8000';
+  private baseBackendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://mindmesh-nexus.onrender.com';
   private agnesBaseUrl = 'https://apihub.agnes-ai.com/v1';
   private apiKey: string = '';
   private lastRequestTime = 0;
@@ -64,19 +64,34 @@ class FrontendAgnesService {
     this.totalRequests++;
     this.lastRequestTime = Date.now();
 
-    try {
-      const resp = await fetch(`${this.baseBackendUrl}/api/agnes/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          verified_curriculum: verifiedCurriculum,
-          student_gap_data: studentGapData,
-          custom_api_key: this.apiKey,
-        }),
-      });
+    const payload = JSON.stringify({
+      prompt,
+      verified_curriculum: verifiedCurriculum,
+      student_gap_data: studentGapData,
+      custom_api_key: this.apiKey,
+    });
 
-      if (resp.ok) {
+    try {
+      let resp: Response | null = null;
+      try {
+        resp = await fetch('/api/agnes/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+      } catch {
+        // Fallback to baseBackendUrl
+      }
+
+      if (!resp || !resp.ok) {
+        resp = await fetch(`${this.baseBackendUrl}/api/agnes/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+      }
+
+      if (resp && resp.ok) {
         return await resp.json();
       }
     } catch (e) {

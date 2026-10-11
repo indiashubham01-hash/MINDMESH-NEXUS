@@ -30,7 +30,7 @@ export interface OllamaModelTag {
 
 const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'qwen2.5:3b';
-const BACKEND_PROXY_URL = 'http://127.0.0.1:8000/api/ollama';
+const BACKEND_PROXY_URL = (import.meta as any).env?.VITE_BACKEND_URL ? `${(import.meta as any).env.VITE_BACKEND_URL}/api/ollama` : '/api/ollama';
 
 class OllamaService {
   private hostUrl: string;

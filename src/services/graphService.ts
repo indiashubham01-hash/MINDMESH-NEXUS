@@ -217,11 +217,25 @@ export const graphService = {
     topicTitle: string = 'Custom Educator Module'
   ): Promise<CurriculumGraphData> {
     try {
-      const response = await fetch('http://127.0.0.1:8000/gnn/extract-graph', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ curriculum_text: curriculumText, topic_title: topicTitle })
-      });
+      const payload = JSON.stringify({ curriculum_text: curriculumText, topic_title: topicTitle });
+      let response: Response | null = null;
+      try {
+        response = await fetch('/gnn/extract-graph', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      } catch {
+        // Fallback to Render URL
+      }
+
+      if (!response || !response.ok) {
+        response = await fetch('https://mindmesh-nexus.onrender.com/gnn/extract-graph', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      }
 
       if (response.ok) {
         const data = await response.json();

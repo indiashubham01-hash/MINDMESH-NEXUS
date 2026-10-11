@@ -99,7 +99,7 @@ class BhashiniService {
 
     const endpoints = [
       this.config.backendProxyUrl || '/api/bhashini',
-      'http://127.0.0.1:8000/api/bhashini'
+      'https://mindmesh-nexus.onrender.com/api/bhashini'
     ];
 
     // 1. Try Backend Proxy
@@ -183,7 +183,7 @@ class BhashiniService {
     const langCode = this.normalizeLang(language);
     const endpoints = [
       this.config.backendProxyUrl || '/api/bhashini',
-      'http://127.0.0.1:8000/api/bhashini'
+      'https://mindmesh-nexus.onrender.com/api/bhashini'
     ];
 
     for (const ep of endpoints) {
@@ -224,7 +224,7 @@ class BhashiniService {
 
     const endpoints = [
       this.config.backendProxyUrl || '/api/bhashini',
-      'http://127.0.0.1:8000/api/bhashini'
+      'https://mindmesh-nexus.onrender.com/api/bhashini'
     ];
 
     for (const ep of endpoints) {

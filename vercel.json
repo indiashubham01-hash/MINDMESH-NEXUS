@@ -1,0 +1,60 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/api/:path*"
+    },
+    {
+      "source": "/gnn/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/gnn/:path*"
+    },
+    {
+      "source": "/quizzes/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/quizzes/:path*"
+    },
+    {
+      "source": "/voice-request",
+      "destination": "https://mindmesh-nexus.onrender.com/voice-request"
+    },
+    {
+      "source": "/resources/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/resources/:path*"
+    },
+    {
+      "source": "/plans/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/plans/:path*"
+    },
+    {
+      "source": "/learners/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/learners/:path*"
+    },
+    {
+      "source": "/class/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/class/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/auth/:path*"
+    },
+    {
+      "source": "/ml/:path*",
+      "destination": "https://mindmesh-nexus.onrender.com/ml/:path*"
+    },
+    {
+      "source": "/download-env",
+      "destination": "https://mindmesh-nexus.onrender.com/download-env"
+    },
+    {
+      "source": "/download-env-full",
+      "destination": "https://mindmesh-nexus.onrender.com/download-env-full"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

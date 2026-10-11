@@ -411,14 +411,29 @@ Analyze the user utterance (which can be in English, Hindi, or Kannada) and outp
         reader.readAsDataURL(audioBlob);
       });
 
-      const proxyRes = await fetch('http://127.0.0.1:8000/api/groq/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio_base64: base64Data,
-          language: language.toLowerCase().includes('hi') ? 'hi' : (language.toLowerCase().includes('kn') ? 'kn' : 'en')
-        })
+      const payload = JSON.stringify({
+        audio_base64: base64Data,
+        language: language.toLowerCase().includes('hi') ? 'hi' : (language.toLowerCase().includes('kn') ? 'kn' : 'en')
       });
+
+      let proxyRes: Response | null = null;
+      try {
+        proxyRes = await fetch('/api/groq/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      } catch {
+        // Fallback to direct Render URL
+      }
+
+      if (!proxyRes || !proxyRes.ok) {
+        proxyRes = await fetch('https://mindmesh-nexus.onrender.com/api/groq/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      }
 
       if (proxyRes.ok) {
         const pData = await proxyRes.json();

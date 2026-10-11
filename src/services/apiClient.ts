@@ -16,7 +16,7 @@ export interface BackendHealth {
 class ApiClient {
   // Uses Vite proxy in development or direct base URL
   private baseUrl = '';
-  private directUrl = 'http://127.0.0.1:8000';
+  private directUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://mindmesh-nexus.onrender.com';
   private isOnline = true;
   private lastHealthCheck: BackendHealth = {
     connected: false,

@@ -1,0 +1,8 @@
+backend/
+server/
+.venv/
+data/
+*.py
+requirements.txt
+Procfile
+render.yaml

@@ -38,7 +38,7 @@ const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3-fl
 class GeminiService {
   private apiKey: string = GEMINI_API_KEY;
   private primaryModel: string = 'gemini-3.8-flash';
-  private backendUrl: string = typeof window !== 'undefined' ? '/api/gemini' : 'http://127.0.0.1:8000/api/gemini';
+  private backendUrl: string = typeof window !== 'undefined' ? '/api/gemini' : ((import.meta as any).env?.VITE_BACKEND_URL ? `${(import.meta as any).env.VITE_BACKEND_URL}/api/gemini` : 'https://mindmesh-nexus.onrender.com/api/gemini');
 
   public setApiKey(key: string) {
     if (key && key.trim()) {

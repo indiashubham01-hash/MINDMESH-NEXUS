@@ -292,17 +292,32 @@ export const FormativeQuizEngine: React.FC<FormativeQuizEngineProps> = ({
 
     try {
       const targetConcept = currentQ?.targetedConcept || 'Photosynthesis Mechanisms';
-      const resp = await fetch('http://127.0.0.1:8000/quizzes/generate-adaptive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: lessonPlan.topic,
-          difficulty,
-          concept: targetConcept,
-          student_name: currentStudent.name,
-          target_language: quizLanguage
-        })
+      const quizPayload = JSON.stringify({
+        topic: lessonPlan.topic,
+        difficulty,
+        concept: targetConcept,
+        student_name: currentStudent.name,
+        target_language: quizLanguage
       });
+
+      let resp: Response | null = null;
+      try {
+        resp = await fetch('/quizzes/generate-adaptive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: quizPayload
+        });
+      } catch {
+        // Fallback to Render URL
+      }
+
+      if (!resp || !resp.ok) {
+        resp = await fetch('https://mindmesh-nexus.onrender.com/quizzes/generate-adaptive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: quizPayload
+        });
+      }
 
       if (resp.ok) {
         const data = await resp.json();
