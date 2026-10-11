@@ -1,8 +1,5 @@
-backend/
-server/
 .venv/
-data/
-*.py
-requirements.txt
-Procfile
-render.yaml
+data/*.parquet
+data/*.jsonl
+data/*.zip
+scratch/

@@ -100,7 +100,7 @@ def root_info(request: Request):
     return {
         "project": "MINDMESH-NEXUS",
         "description": "Voice-First AI Teaching Co-Pilot (Unified Brain & Frontend)",
-        "frontend_url": "http://127.0.0.1:8000/",
+        "frontend_url": "/",
         "status": "OPERATIONAL",
         "primary_llm": "gemini-3.8-flash (Google Gemini AI)",
         "gemini_project": "projects/586089963185",
@@ -131,12 +131,29 @@ def serve_ui():
     return {"status": "Frontend not built yet. Run npm run build."}
 
 @app.get("/api/system/status")
-def system_status():
+async def system_status():
+    server_status = None
+    server_url = os.getenv("SERVER_URL")
+    if server_url:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                res = await client.get(f"{server_url.rstrip('/')}/api/system/status")
+                if res.status_code == 200:
+                    server_status = res.json()
+        except Exception as e:
+            server_status = {"status": "UNREACHABLE", "url": server_url, "error": str(e)}
+
     return {
         "project": "MINDMESH-NEXUS",
         "status": "OPERATIONAL",
         "rpm_limit": 10,
         "token_queue_interval_seconds": 6.0,
+        "internal_server_binding": {
+            "server_url": server_url or "NOT_BOUND",
+            "status": "CONNECTED" if server_status and server_status.get("status") == "HEALTHY" else ("STANDALONE" if not server_url else "ERROR"),
+            "details": server_status
+        },
         "active_models": {
             "gemini": "gemini-3.8-flash (Project 586089963185)",
             "llm": "agnes-3.0-flash",
