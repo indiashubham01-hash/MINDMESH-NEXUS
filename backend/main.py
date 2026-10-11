@@ -58,6 +58,32 @@ from fastapi.staticfiles import StaticFiles
 
 DIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
 ASSETS_DIR = os.path.join(DIST_DIR, "assets")
+ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+ENV_EXAMPLE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env.example"))
+
+@app.get("/api/download-env")
+def download_env():
+    """Direct browser HTTP download endpoint for .env configuration"""
+    if os.path.exists(ENV_PATH):
+        return FileResponse(
+            ENV_PATH,
+            media_type="text/plain",
+            filename=".env",
+            headers={"Content-Disposition": "attachment; filename=.env"}
+        )
+    raise HTTPException(status_code=404, detail=".env file not found")
+
+@app.get("/api/download-env-example")
+def download_env_example():
+    """Direct browser HTTP download endpoint for .env.example configuration"""
+    if os.path.exists(ENV_EXAMPLE_PATH):
+        return FileResponse(
+            ENV_EXAMPLE_PATH,
+            media_type="text/plain",
+            filename=".env.example",
+            headers={"Content-Disposition": "attachment; filename=.env.example"}
+        )
+    raise HTTPException(status_code=404, detail=".env.example file not found")
 
 if os.path.exists(ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
