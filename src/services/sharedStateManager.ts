@@ -21,6 +21,7 @@ import {
 import { 
   INITIAL_DOCUMENTS, 
   INITIAL_STUDENTS, 
+  DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN,
   DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN 
 } from '../data/mockData';
 
@@ -30,7 +31,10 @@ const STORAGE_STUDENTS_KEY = 'mindmesh_students_v2';
 const STORAGE_INTERVENTIONS_KEY = 'mindmesh_interventions_v2';
 const STORAGE_ASSESSMENTS_KEY = 'mindmesh_assessments_v2';
 const STORAGE_DOCUMENTS_KEY = 'mindmesh_documents_v2';
-const STORAGE_LESSON_KEY = 'mindmesh_lesson_v2';
+const STORAGE_LESSON_KEY = 'mindmesh_lesson_v3';
+const STORAGE_CLASSROOM_CODE_KEY = 'mindmesh_classroom_code_v1';
+const STORAGE_STUDENT_CODE_KEY = 'mindmesh_student_joined_code_v1';
+const STORAGE_CONNECTED_STUDENTS_KEY = 'mindmesh_connected_students_v1';
 
 export const INITIAL_CURRICULUM_MODULES: CurriculumTopic[] = [
   // Module 1: Foundational Linear Data Structures
@@ -421,7 +425,7 @@ class SharedStateManager {
       localStorage.setItem(STORAGE_DOCUMENTS_KEY, JSON.stringify(INITIAL_DOCUMENTS));
     }
     if (!localStorage.getItem(STORAGE_LESSON_KEY)) {
-      localStorage.setItem(STORAGE_LESSON_KEY, JSON.stringify(DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN));
+      localStorage.setItem(STORAGE_LESSON_KEY, JSON.stringify(DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN));
     }
   }
 
@@ -524,8 +528,14 @@ class SharedStateManager {
   // --- 2. CALENDAR EVENTS ---
   public getCalendarEvents(): CalendarEvent[] {
     if (typeof window === 'undefined') return INITIAL_CALENDAR_EVENTS;
-    const data = localStorage.getItem(STORAGE_CALENDAR_KEY);
-    return data ? JSON.parse(data) : INITIAL_CALENDAR_EVENTS;
+    try {
+      const data = localStorage.getItem(STORAGE_CALENDAR_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_CALENDAR_EVENTS;
   }
 
   public saveCalendarEvents(events: CalendarEvent[]) {
@@ -773,8 +783,16 @@ class SharedStateManager {
   // --- 6. DOCUMENTS & KNOWLEDGE BASE ---
   public getDocuments(): DocumentSource[] {
     if (typeof window === 'undefined') return INITIAL_DOCUMENTS;
-    const data = localStorage.getItem(STORAGE_DOCUMENTS_KEY);
-    return data ? JSON.parse(data) : INITIAL_DOCUMENTS;
+    try {
+      const data = localStorage.getItem(STORAGE_DOCUMENTS_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_DOCUMENTS;
   }
 
   public saveDocuments(docs: DocumentSource[]) {
@@ -783,23 +801,121 @@ class SharedStateManager {
     this.notifyListeners();
   }
 
-  public addDocument(doc: DocumentSource) {
-    const docs = this.getDocuments();
-    docs.unshift(doc);
-    this.saveDocuments(docs);
+  public addDocument(doc: DocumentSource): DocumentSource[] {
+    const current = this.getDocuments();
+    const updated = [doc, ...current.filter(d => d.id !== doc.id)];
+    this.saveDocuments(updated);
+    return updated;
   }
 
   // --- 7. LESSON PLAN ---
   public getLessonPlan(): LessonPlan {
-    if (typeof window === 'undefined') return DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN;
-    const data = localStorage.getItem(STORAGE_LESSON_KEY);
-    return data ? JSON.parse(data) : DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN;
+    if (typeof window === 'undefined') return DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN;
+    try {
+      const data = localStorage.getItem(STORAGE_LESSON_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed && parsed.topic && parsed.standardLesson && parsed.beginnerExplanation && parsed.formativeQuiz) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN;
   }
 
   public saveLessonPlan(plan: LessonPlan) {
     if (typeof window === 'undefined') return;
     localStorage.setItem(STORAGE_LESSON_KEY, JSON.stringify(plan));
     this.notifyListeners();
+  }
+
+  // --- 8. CLASSROOM CODE & PORTAL INTEGRATION ---
+  public generateRandomCode(): string {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const prefix = 'MM';
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const randLetter = letters.charAt(Math.floor(Math.random() * letters.length));
+    return `${prefix}-${randNum}${randLetter}`;
+  }
+
+  public getClassroomCode(): string {
+    if (typeof window === 'undefined') return 'MM-7842A';
+    let code = localStorage.getItem(STORAGE_CLASSROOM_CODE_KEY);
+    if (!code) {
+      code = this.generateRandomCode();
+      localStorage.setItem(STORAGE_CLASSROOM_CODE_KEY, code);
+    }
+    return code;
+  }
+
+  public generateNewClassroomCode(): string {
+    const newCode = this.generateRandomCode();
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_CLASSROOM_CODE_KEY, newCode);
+      // Reset connected students when teacher regenerates code
+      localStorage.setItem(STORAGE_CONNECTED_STUDENTS_KEY, JSON.stringify([]));
+      this.notifyListeners();
+    }
+    return newCode;
+  }
+
+  public getStudentJoinedCode(): string {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(STORAGE_STUDENT_CODE_KEY) || '';
+  }
+
+  public isStudentConnected(): boolean {
+    const teacherCode = this.getClassroomCode().trim().toUpperCase();
+    const studentCode = this.getStudentJoinedCode().trim().toUpperCase();
+    return Boolean(studentCode && studentCode === teacherCode);
+  }
+
+  public connectStudentToClassroom(inputCode: string, studentName: string = 'Active Student'): { success: boolean; message: string } {
+    if (typeof window === 'undefined') return { success: false, message: 'Browser storage unavailable' };
+    const teacherCode = this.getClassroomCode().trim().toUpperCase();
+    const normalizedInput = inputCode.trim().toUpperCase();
+
+    if (!normalizedInput) {
+      return { success: false, message: 'Please enter a valid classroom code.' };
+    }
+
+    if (normalizedInput !== teacherCode) {
+      return { 
+        success: false, 
+        message: `Incorrect code "${normalizedInput}". Please enter the active code shown on your teacher's dashboard (${teacherCode}).` 
+      };
+    }
+
+    localStorage.setItem(STORAGE_STUDENT_CODE_KEY, normalizedInput);
+
+    // Track connected students list
+    const currentList = this.getConnectedStudents();
+    if (!currentList.includes(studentName)) {
+      currentList.push(studentName);
+      localStorage.setItem(STORAGE_CONNECTED_STUDENTS_KEY, JSON.stringify(currentList));
+    }
+
+    this.notifyListeners();
+    return { 
+      success: true, 
+      message: `Connected successfully to Classroom ${teacherCode}! All teacher calendar schedules and lesson updates are now synchronized in real-time.` 
+    };
+  }
+
+  public disconnectStudent(studentName: string = 'Active Student') {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_STUDENT_CODE_KEY);
+
+    const currentList = this.getConnectedStudents().filter(s => s !== studentName);
+    localStorage.setItem(STORAGE_CONNECTED_STUDENTS_KEY, JSON.stringify(currentList));
+
+    this.notifyListeners();
+  }
+
+  public getConnectedStudents(): string[] {
+    if (typeof window === 'undefined') return [];
+    const data = localStorage.getItem(STORAGE_CONNECTED_STUDENTS_KEY);
+    return data ? JSON.parse(data) : [];
   }
 }
 

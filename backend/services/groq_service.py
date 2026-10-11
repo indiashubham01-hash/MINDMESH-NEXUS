@@ -103,12 +103,35 @@ Analyze the teacher or student voice command and output ONLY a JSON object with 
         Transcribes voice audio using Groq Whisper Cloud Engine (whisper-large-v3-turbo).
         """
         try:
+            mime = "audio/webm"
+            filename = "speech.webm"
+            if "data:audio/wav" in audio_base64:
+                mime = "audio/wav"
+                filename = "speech.wav"
+            elif "data:audio/mp4" in audio_base64:
+                mime = "audio/mp4"
+                filename = "speech.mp4"
+            elif "data:audio/ogg" in audio_base64:
+                mime = "audio/ogg"
+                filename = "speech.ogg"
+
             clean_b64 = audio_base64.split(",")[1] if "," in audio_base64 else audio_base64
             audio_bytes = base64.b64decode(clean_b64)
 
+            # Auto-detect EBML / RIFF header if needed
+            if audio_bytes.startswith(b"RIFF"):
+                filename = "speech.wav"
+                mime = "audio/wav"
+            elif audio_bytes.startswith(b"\x1a\x45\xdf\xa3"):
+                filename = "speech.webm"
+                mime = "audio/webm"
+            elif audio_bytes.startswith(b"OggS"):
+                filename = "speech.ogg"
+                mime = "audio/ogg"
+
             for w_model in [self.whisper_primary, self.whisper_fallback]:
                 try:
-                    files = {"file": ("speech.wav", audio_bytes, "audio/wav")}
+                    files = {"file": (filename, audio_bytes, mime)}
                     data = {"model": w_model}
                     if language and language not in ["Bilingual", "ALL"]:
                         data["language"] = "hi" if "hi" in language else ("kn" if "kn" in language else "en")

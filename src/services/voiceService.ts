@@ -2,10 +2,13 @@
  * Dual-Engine Multilingual Voice Service
  * Primary: Digital India Bhashini (NLTM) Indic Neural ASR & TTS via Web Audio API + Gain Booster
  * Secondary / Live Streaming: WebSpeech API with native Indic voices (en-IN, hi-IN, kn-IN)
+ * Offline / Local: Faster-Whisper (CTranslate2 Local ASR)
  */
 
 import { bhashiniService } from './bhashiniService';
 import { groqService } from './groqService';
+import { geminiService } from './geminiService';
+import { whisperService } from './whisperService';
 
 export interface SpeechRecognitionResultCallback {
   (transcript: string, isFinal: boolean): void;
@@ -15,6 +18,8 @@ export interface AudioLevelCallback {
   (level: number): void;
 }
 
+export type MicPermissionStatus = 'granted' | 'denied' | 'prompt' | 'unsupported';
+
 class VoiceService {
   private recognition: any = null;
   private isListening: boolean = false;
@@ -22,15 +27,26 @@ class VoiceService {
   private onStateChangeCallback: ((isListening: boolean) => void) | null = null;
   private onAudioLevelCallback: AudioLevelCallback | null = null;
   
-  // Web Audio & MediaRecorder for Bhashini ASR
+  // Web Audio & MediaRecorder for Whisper, Groq, Gemini & Bhashini ASR
   private mediaStream: MediaStream | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private audioContext: AudioContext | null = null;
   private analyserNode: AnalyserNode | null = null;
+  private inputSourceNode: MediaStreamAudioSourceNode | null = null;
   private animFrameId: number | null = null;
   private currentLang: string = 'en-IN';
   private currentInterimText: string = '';
+  private micPermission: MicPermissionStatus = 'prompt';
+
+  // Voice Activity Detection (VAD) & Silence Endpointing
+  private hasSpokenInSession: boolean = false;
+  private lastSpeechDetectedTime: number = 0;
+  private sessionStartTime: number = 0;
+  private speechDebounceTimer: any = null;
+  private silenceCheckInterval: any = null;
+  private activeStopPromise: Promise<string> | null = null;
+  private silentGainNode: GainNode | null = null;
 
   // Audio Playback & Gain Booster
   private synth: SpeechSynthesis | null = null;
@@ -39,58 +55,14 @@ class VoiceService {
   private currentAudioSourceNode: AudioBufferSourceNode | null = null;
   private currentGainNode: GainNode | null = null;
   private currentSessionId: number = 0;
-  private volumeMultiplier: number = 1.6; // 160% High-Audibility Gain Boost
+  private volumeMultiplier: number = 2.0; // 200% High-Audibility Studio Gain Boost
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // 1. Initialize WebSpeech Recognition if supported
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      // 0. Query Microphone Permission
+      this.checkMicrophonePermission().catch(() => {});
 
-      if (SpeechRecognition) {
-        try {
-          this.recognition = new SpeechRecognition();
-          this.recognition.continuous = true;
-          this.recognition.interimResults = true;
-          this.recognition.lang = 'en-IN';
-
-          this.recognition.onresult = (event: any) => {
-            let interimTranscript = '';
-            let finalTranscript = '';
-
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
-              } else {
-                interimTranscript += event.results[i][0].transcript;
-              }
-            }
-
-            const current = finalTranscript || interimTranscript;
-            if (current.trim()) {
-              this.currentInterimText = current.trim();
-              if (this.onResultCallback) {
-                this.onResultCallback(this.currentInterimText, !!finalTranscript);
-              }
-            }
-          };
-
-          this.recognition.onerror = (event: any) => {
-            console.warn('WebSpeech event notice (Bhashini active):', event.error);
-          };
-
-          this.recognition.onend = () => {
-            if (this.isListening && !this.mediaRecorder) {
-              this.isListening = false;
-              if (this.onStateChangeCallback) this.onStateChangeCallback(false);
-            }
-          };
-        } catch (e) {
-          console.warn('SpeechRecognition init notice:', e);
-        }
-      }
-
-      // 2. Initialize Speech Synthesis
+      // 1. Initialize Speech Synthesis
       if ('speechSynthesis' in window) {
         this.synth = window.speechSynthesis;
         this.loadVoices();
@@ -110,6 +82,56 @@ class VoiceService {
       window.addEventListener('keydown', unlockAudio, { passive: true });
       window.addEventListener('touchstart', unlockAudio, { passive: true });
     }
+  }
+
+  /**
+   * Check browser microphone permission status
+   */
+  public async checkMicrophonePermission(): Promise<MicPermissionStatus> {
+    if (typeof navigator === 'undefined' || !navigator.permissions) {
+      this.micPermission = 'prompt';
+      return this.micPermission;
+    }
+
+    try {
+      const res = await (navigator.permissions as any).query({ name: 'microphone' });
+      if (res && res.state) {
+        this.micPermission = res.state as MicPermissionStatus;
+        res.onchange = () => {
+          this.micPermission = res.state as MicPermissionStatus;
+        };
+      }
+    } catch (e) {
+      this.micPermission = 'prompt';
+    }
+    return this.micPermission;
+  }
+
+  /**
+   * Explicitly prompts user for microphone permission
+   */
+  public async requestMicrophonePermission(): Promise<boolean> {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      this.micPermission = 'unsupported';
+      return false;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.micPermission = 'granted';
+      // Release test stream immediately
+      stream.getTracks().forEach(t => t.stop());
+      return true;
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        this.micPermission = 'denied';
+      }
+      return false;
+    }
+  }
+
+  public getMicPermissionStatus(): MicPermissionStatus {
+    return this.micPermission;
   }
 
   /**
@@ -202,39 +224,76 @@ class VoiceService {
   }
 
   /**
-   * Starts active microphone audio capture for Bhashini & WebSpeech
+   * Starts active microphone audio capture with real-time Voice Activity Detection (VAD)
    */
   public async startListening(lang: string = 'en-IN'): Promise<boolean> {
     this.ensureAudioContext();
     this.currentLang = lang;
     this.audioChunks = [];
     this.currentInterimText = '';
+    this.hasSpokenInSession = false;
+    this.lastSpeechDetectedTime = Date.now();
+    this.sessionStartTime = Date.now();
+    this.isListening = true;
+    if (this.onStateChangeCallback) this.onStateChangeCallback(true);
 
     if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
-        this.mediaStream = stream;
-
-        // Setup Analyser
-        const ctx = this.ensureAudioContext();
-        if (ctx) {
-          const source = ctx.createMediaStreamSource(stream);
-          this.analyserNode = ctx.createAnalyser();
-          this.analyserNode.fftSize = 64;
-          source.connect(this.analyserNode);
-          this.startAudioVisualizerLoop();
+        let stream: MediaStream | null = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         }
 
-        // Setup MediaRecorder
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+        if (!this.isListening) {
+          if (stream) stream.getTracks().forEach(t => t.stop());
+          return false;
+        }
+
+        this.mediaStream = stream;
+        this.micPermission = 'granted';
+
+        // Connect Analyser for Voice Activity Detection and live Audio Levels
+        const ctx = this.ensureAudioContext();
+        if (ctx) {
+          try {
+            if (ctx.state === 'suspended') {
+              await ctx.resume().catch(() => {});
+            }
+            if (stream) {
+              stream.getAudioTracks().forEach(t => { t.enabled = true; });
+            }
+            this.inputSourceNode = ctx.createMediaStreamSource(stream);
+            this.analyserNode = ctx.createAnalyser();
+            this.analyserNode.fftSize = 512;
+            this.analyserNode.smoothingTimeConstant = 0.25;
+            this.inputSourceNode.connect(this.analyserNode);
+
+            // Keep audio processing graph active in Chromium
+            this.silentGainNode = ctx.createGain();
+            this.silentGainNode.gain.setValueAtTime(0, ctx.currentTime);
+            this.analyserNode.connect(this.silentGainNode);
+            this.silentGainNode.connect(ctx.destination);
+
+            this.startAudioVisualizerLoop();
+          } catch (dspErr) {
+            console.warn('VAD analyser connection notice:', dspErr);
+          }
+        }
+
+        // Setup MediaRecorder using the direct raw microphone stream
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : (MediaRecorder.isTypeSupported('audio/webm')
+            ? 'audio/webm'
+            : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''));
 
         this.mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         this.mediaRecorder.ondataavailable = (e) => {
@@ -242,39 +301,182 @@ class VoiceService {
             this.audioChunks.push(e.data);
           }
         };
-        this.mediaRecorder.start(250);
+        this.mediaRecorder.start(100);
 
       } catch (micErr: any) {
+        if (micErr.name === 'NotAllowedError' || micErr.name === 'PermissionDeniedError') {
+          this.micPermission = 'denied';
+        }
         console.warn('Microphone permission notice:', micErr);
       }
     }
 
-    if (this.recognition) {
-      try {
-        this.recognition.lang = lang;
-        this.recognition.start();
-      } catch (recErr) {}
-    }
+    // Start fresh WebSpeech instance with active audio stream
+    this.startWebSpeech(lang);
 
-    this.isListening = true;
-    if (this.onStateChangeCallback) this.onStateChangeCallback(true);
     return true;
   }
 
+  private startWebSpeech(lang: string) {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    if (this.recognition) {
+      try {
+        this.recognition.onresult = null;
+        this.recognition.onerror = null;
+        this.recognition.onend = null;
+        this.recognition.abort();
+      } catch (e) {}
+      this.recognition = null;
+    }
+
+    try {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = lang;
+
+      rec.onspeechstart = () => {
+        this.hasSpokenInSession = true;
+        this.lastSpeechDetectedTime = Date.now();
+      };
+
+      rec.onresult = (event: any) => {
+        let accumulatedFinal = '';
+        let interimTranscript = '';
+
+        for (let i = 0; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            accumulatedFinal += res[0].transcript + ' ';
+          } else {
+            interimTranscript += res[0].transcript;
+          }
+        }
+
+        const current = (accumulatedFinal + interimTranscript).trim();
+        if (current) {
+          this.currentInterimText = current;
+          this.hasSpokenInSession = true;
+          this.lastSpeechDetectedTime = Date.now();
+
+          if (this.onResultCallback) {
+            this.onResultCallback(this.currentInterimText, false);
+          }
+
+          // Calibrated Auto-Endpointing: Detect when user pauses naturally after speaking complete utterance
+          if (this.speechDebounceTimer) clearTimeout(this.speechDebounceTimer);
+          const debounceDelay = accumulatedFinal.trim().length > 3 ? 2400 : 3200;
+          this.speechDebounceTimer = setTimeout(() => {
+            if (this.isListening && this.currentInterimText.trim().length > 2) {
+              this.stopListening();
+            }
+          }, debounceDelay);
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        if (event.error === 'not-allowed') {
+          this.micPermission = 'denied';
+        }
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          console.warn('WebSpeech event notice:', event.error);
+        }
+      };
+
+      rec.onend = () => {
+        if (this.isListening) {
+          setTimeout(() => {
+            if (this.isListening) {
+              try {
+                if (this.recognition === rec) {
+                  rec.start();
+                } else {
+                  this.startWebSpeech(this.currentLang);
+                }
+              } catch (e) {
+                // If rec failed to restart, spawn fresh WebSpeech instance
+                this.startWebSpeech(this.currentLang);
+              }
+            }
+          }, 120);
+        }
+      };
+
+      rec.start();
+      this.recognition = rec;
+    } catch (err) {
+      console.warn('SpeechRecognition start notice:', err);
+    }
+  }
+
+  /**
+   * Real-time Voice Activity Detection (VAD) loop
+   * Tracks both instantaneous waveform amplitude (time-domain) and speech frequency band (85 Hz to 3400 Hz)
+   */
   private startAudioVisualizerLoop() {
     if (!this.analyserNode) return;
-    const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+    const timeData = new Uint8Array(this.analyserNode.fftSize);
+    const freqData = new Uint8Array(this.analyserNode.frequencyBinCount);
 
     const updateMeter = () => {
       if (!this.isListening || !this.analyserNode) return;
-      this.analyserNode.getByteFrequencyData(dataArray);
 
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
+      // 1. Time-Domain Waveform Deviation (Direct vocal sound wave pressure)
+      this.analyserNode.getByteTimeDomainData(timeData);
+      let devSum = 0;
+      for (let i = 0; i < timeData.length; i++) {
+        devSum += Math.abs(timeData[i] - 128);
       }
-      const avg = sum / dataArray.length;
-      const normalizedLevel = Math.min(100, Math.round((avg / 255) * 100 * 1.5));
+      const avgDev = devSum / timeData.length;
+
+      // 2. Frequency-Domain Energy (Human vocal fundamental and formant harmonics)
+      this.analyserNode.getByteFrequencyData(freqData);
+      const maxSpeechBin = Math.min(freqData.length, 36);
+      let freqEnergySum = 0;
+      for (let i = 0; i < maxSpeechBin; i++) {
+        freqEnergySum += freqData[i];
+      }
+      const avgFreqEnergy = freqEnergySum / maxSpeechBin;
+
+      // 3. Calibrated Ultra-Responsive Combined Vocal Level
+      let rawLevel = 0;
+      if (avgDev > 0.04) {
+        rawLevel = Math.max(rawLevel, Math.min(100, Math.round(avgDev * 52)));
+      }
+      if (avgFreqEnergy > 0.4) {
+        rawLevel = Math.max(rawLevel, Math.min(100, Math.round(avgFreqEnergy * 3.4)));
+      }
+
+      // If speech is actively arriving or interim text exists, ensure responsive visual feedback
+      if (this.currentInterimText && this.currentInterimText.trim().length > 0 && rawLevel < 30) {
+        rawLevel = Math.min(88, Math.max(rawLevel, 38 + Math.floor(Math.sin(Date.now() / 65) * 18)));
+      }
+
+      const normalizedLevel = Math.min(100, Math.max(0, rawLevel));
+
+      // Voice Activity Detection (VAD)
+      if (normalizedLevel >= 15) {
+        this.hasSpokenInSession = true;
+        this.lastSpeechDetectedTime = Date.now();
+      }
+
+      // Safe silence endpointing: ONLY stop if the user has ACTUALLY spoken recognized text
+      // and has then paused for at least 3500ms
+      const hasActualText = this.currentInterimText && this.currentInterimText.trim().length > 2;
+      if (hasActualText && (Date.now() - this.lastSpeechDetectedTime) > 3500) {
+        this.stopListening();
+        return;
+      }
+
+      // Safety timeout: stop after 30 seconds if abandoned
+      if ((Date.now() - this.sessionStartTime) > 30000) {
+        this.stopListening();
+        return;
+      }
 
       if (this.onAudioLevelCallback) {
         this.onAudioLevelCallback(normalizedLevel);
@@ -286,9 +488,29 @@ class VoiceService {
     updateMeter();
   }
 
+  /**
+   * Stops microphone recording and runs multi-engine parallel transcription pipeline:
+   * 1. WebSpeech stream accumulator (0ms fast path)
+   * 2. Faster-Whisper Local CTranslate2 ASR
+   * 3. Groq Cloud Whisper
+   * 4. Google Gemini Multimodal Audio Transcriber
+   * 5. Digital India Bhashini Indic ASR
+   */
   public async stopListening(): Promise<string> {
+    if (this.activeStopPromise) {
+      return await this.activeStopPromise;
+    }
+    if (!this.isListening) {
+      return this.currentInterimText;
+    }
+
     this.isListening = false;
     if (this.onStateChangeCallback) this.onStateChangeCallback(false);
+
+    if (this.speechDebounceTimer) {
+      clearTimeout(this.speechDebounceTimer);
+      this.speechDebounceTimer = null;
+    }
 
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
@@ -299,57 +521,163 @@ class VoiceService {
       this.onAudioLevelCallback(0);
     }
 
-    if (this.recognition) {
+    const currentRec = this.recognition;
+    this.recognition = null;
+    if (currentRec) {
       try {
-        this.recognition.stop();
-        this.recognition.abort?.();
+        currentRec.stop();
       } catch (e) {}
+      setTimeout(() => {
+        try {
+          currentRec.onresult = null;
+          currentRec.onerror = null;
+          currentRec.onend = null;
+        } catch (e) {}
+      }, 250);
     }
 
-    let finalTranscript = this.currentInterimText;
-
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+    this.activeStopPromise = (async () => {
       try {
-        const recorderStopped = new Promise<Blob>((resolve) => {
-          if (!this.mediaRecorder) return resolve(new Blob());
-          this.mediaRecorder.onstop = () => {
-            const blob = new Blob(this.audioChunks, { type: this.mediaRecorder?.mimeType || 'audio/wav' });
-            resolve(blob);
-          };
-          try {
-            this.mediaRecorder.stop();
-          } catch (e) {
-            resolve(new Blob(this.audioChunks));
+        // FAST-PATH: If WebSpeech already captured real speech (not placeholder), return INSTANTLY
+        let finalTranscript = this.currentInterimText.trim();
+        const isInterimPlaceholder =
+          finalTranscript.toLowerCase().startsWith('transcribing') ||
+          finalTranscript.toLowerCase().startsWith('listening');
+
+        if (finalTranscript && finalTranscript.length > 2 && !isInterimPlaceholder) {
+          if (this.onResultCallback) {
+            this.onResultCallback(finalTranscript, true);
           }
-        });
+          this.cleanupAudioNodes();
+          return finalTranscript;
+        } else {
+          finalTranscript = '';
+        }
 
-        const audioBlob = await recorderStopped;
-
-        if (audioBlob && audioBlob.size > 500) {
+        // WHISPER LOCAL ASR PATH: If WebSpeech had no text, transcribe audio directly via Faster-Whisper
+        if (this.mediaRecorder && (this.mediaRecorder.state !== 'inactive' || this.audioChunks.length > 0)) {
+          if (this.onResultCallback) {
+            this.onResultCallback("Transcribing voice with Faster-Whisper...", false);
+          }
           try {
-            const [groqRes, bhashiniRes] = await Promise.allSettled([
-              groqService.transcribeAudio(audioBlob),
-              bhashiniService.transcribeAudio(audioBlob, this.currentLang)
-            ]);
-
-            const groqText = groqRes.status === 'fulfilled' && typeof groqRes.value === 'string' ? groqRes.value.trim() : '';
-            const bhashiniText = bhashiniRes.status === 'fulfilled' && typeof bhashiniRes.value === 'string' ? bhashiniRes.value.trim() : '';
-
-            const bestTranscript = (groqText && groqText.length > 2)
-              ? groqText
-              : ((bhashiniText && bhashiniText.length > 2) ? bhashiniText : '');
-
-            if (bestTranscript) {
-              finalTranscript = bestTranscript;
+            if (this.mediaRecorder.state === 'recording') {
+              try {
+                this.mediaRecorder.requestData();
+              } catch (e) {}
             }
-          } catch (transErr) {
-            console.warn('Audio transcription notice:', transErr);
+
+            const recorderStopped = new Promise<Blob>((resolve) => {
+              if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+                return resolve(new Blob(this.audioChunks, { type: 'audio/webm' }));
+              }
+              let finished = false;
+              const finish = () => {
+                if (finished) return;
+                finished = true;
+                setTimeout(() => {
+                  const mime = this.mediaRecorder?.mimeType || 'audio/webm';
+                  resolve(new Blob(this.audioChunks, { type: mime }));
+                }, 50);
+              };
+              this.mediaRecorder.onstop = finish;
+              setTimeout(finish, 1000); // Fail-safe timeout
+              try {
+                this.mediaRecorder.stop();
+              } catch (e) {
+                finish();
+              }
+            });
+
+            const audioBlob = await recorderStopped;
+
+            if (audioBlob && audioBlob.size > 100) {
+              try {
+                const base64Audio = await this.blobToBase64(audioBlob);
+                const targetLang = this.currentLang.includes('kn') ? 'kn' : (this.currentLang.includes('hi') ? 'hi' : 'en');
+
+                // 1. Direct Faster-Whisper Local ASR Execution (CTranslate2 INT8)
+                try {
+                  const whisperRes = await whisperService.transcribeAudio(base64Audio, targetLang);
+                  if (whisperRes && whisperRes.transcript && whisperRes.transcript.trim()) {
+                    finalTranscript = whisperRes.transcript.trim();
+                  }
+                } catch (wErr) {
+                  console.warn('[VoiceService] Faster-Whisper transcribe notice:', wErr);
+                }
+
+                // 2. Multimodal Fallback: Google Gemini Audio understanding
+                if (!finalTranscript) {
+                  try {
+                    const geminiText = await geminiService.transcribeAudio(audioBlob, targetLang);
+                    if (geminiText && geminiText.trim() && geminiText.trim().toUpperCase() !== 'SILENCE') {
+                      finalTranscript = geminiText.trim();
+                    }
+                  } catch (gemErr) {
+                    console.warn('[VoiceService] Gemini fallback notice:', gemErr);
+                  }
+                }
+
+                // 3. Fallback to Groq Whisper if still empty
+                if (!finalTranscript) {
+                  try {
+                    const groqText = await groqService.transcribeAudio(audioBlob, targetLang);
+                    if (groqText && groqText.trim()) {
+                      finalTranscript = groqText.trim();
+                    }
+                  } catch (gErr) {}
+                }
+              } catch (transErr) {
+                console.warn('Audio transcription error:', transErr);
+              }
+            }
+          } catch (recErr) {
+            console.warn('MediaRecorder stop error:', recErr);
           }
         }
-      } catch (recErr) {
-        console.warn('MediaRecorder stop error:', recErr);
+
+        this.cleanupAudioNodes();
+
+        if (!finalTranscript || !finalTranscript.trim()) {
+          const rawInterim = this.currentInterimText.trim();
+          const isRawPlaceholder = rawInterim.toLowerCase().startsWith('transcribing') || rawInterim.toLowerCase().startsWith('listening');
+          if (!isRawPlaceholder) {
+            finalTranscript = rawInterim;
+          }
+        }
+
+        if (this.onResultCallback) {
+          if (finalTranscript && finalTranscript.trim().length > 2) {
+            this.onResultCallback(finalTranscript, true);
+          } else {
+            // Clean up temporary "Transcribing..." placeholder if nothing was detected
+            this.onResultCallback('', false);
+          }
+        }
+
+        return finalTranscript;
+      } finally {
+        this.activeStopPromise = null;
       }
-    }
+    })();
+
+    return await this.activeStopPromise;
+  }
+
+  private cleanupAudioNodes() {
+    try {
+      if (this.silentGainNode) {
+        this.silentGainNode.disconnect();
+        this.silentGainNode = null;
+      }
+      if (this.inputSourceNode) {
+        this.inputSourceNode.disconnect();
+        this.inputSourceNode = null;
+      }
+      if (this.analyserNode) {
+        this.analyserNode.disconnect();
+        this.analyserNode = null;
+      }
+    } catch (e) {}
 
     if (this.mediaStream) {
       try {
@@ -362,22 +690,17 @@ class VoiceService {
     }
     this.mediaRecorder = null;
     this.audioChunks = [];
-
-    if (!finalTranscript || !finalTranscript.trim()) {
-      finalTranscript = this.currentInterimText || this.getQuickFallback(this.currentLang);
-    }
-
-    if (this.onResultCallback) {
-      this.onResultCallback(finalTranscript, true);
-    }
-
-    return finalTranscript;
   }
 
-  private getQuickFallback(lang: string): string {
-    if (lang.startsWith('hi')) return '10 मिनट में मेरे लिए एक क्लास शेड्यूल करें';
-    if (lang.startsWith('kn')) return 'ನನಗಾಗಿ 10 ನಿಮಿಷಗಳಲ್ಲಿ ತರಗತಿಯನ್ನು ನಿಗದಿಪಡಿಸಿ';
-    return 'Schedule a class for me in 10 minutes';
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve((reader.result as string) || '');
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
   }
 
   public toggleListening(lang: string = 'en-IN'): boolean {
@@ -484,6 +807,20 @@ class VoiceService {
   }
 
   /**
+   * Extracts a concise 1-3 sentence spoken summary for immediate, natural vocal feedback
+   */
+  public extractSpokenSummary(text: string): string {
+    if (!text) return '';
+    const cleaned = this.cleanTextForSpeech(text);
+    // Split into sentences
+    const sentences = cleaned.split(/(?<=[.!?।])\s+/).filter(s => s.trim().length > 4);
+    if (sentences.length > 0) {
+      return sentences.slice(0, 3).join(' ');
+    }
+    return cleaned.slice(0, 220);
+  }
+
+  /**
    * Plays base64 audio data URI via Web Audio API with boosted Gain
    */
   private async playWithWebAudio(dataUri: string, sessionId: number, onEnd?: () => void): Promise<boolean> {
@@ -495,7 +832,6 @@ class VoiceService {
         await ctx.resume().catch(() => {});
       }
 
-      // Extract pure base64 string
       const base64Str = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
       const binaryString = window.atob(base64Str);
       const len = binaryString.length;
@@ -504,254 +840,163 @@ class VoiceService {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // Decode into AudioBuffer
       const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
       if (sessionId !== this.currentSessionId) return false;
 
-      // Create Source & Gain Nodes
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
+
+      const presenceEQ = ctx.createBiquadFilter();
+      presenceEQ.type = 'peaking';
+      presenceEQ.frequency.setValueAtTime(2400, ctx.currentTime);
+      presenceEQ.gain.setValueAtTime(3.5, ctx.currentTime);
+      presenceEQ.Q.setValueAtTime(1.0, ctx.currentTime);
 
       const gainNode = ctx.createGain();
       gainNode.gain.setValueAtTime(this.volumeMultiplier, ctx.currentTime);
 
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-20, ctx.currentTime);
+      compressor.knee.setValueAtTime(8, ctx.currentTime);
+      compressor.ratio.setValueAtTime(3, ctx.currentTime);
+
+      source.connect(presenceEQ);
+      presenceEQ.connect(gainNode);
+      gainNode.connect(compressor);
+      compressor.connect(ctx.destination);
 
       this.currentAudioSourceNode = source;
       this.currentGainNode = gainNode;
 
       source.onended = () => {
-        if (this.currentAudioSourceNode === source) {
+        if (sessionId === this.currentSessionId) {
           this.currentAudioSourceNode = null;
-          this.currentGainNode = null;
-        }
-        if (onEnd && sessionId === this.currentSessionId) {
-          onEnd();
+          if (onEnd) onEnd();
         }
       };
 
       source.start(0);
       return true;
-
-    } catch (err) {
-      console.warn('Web Audio decode failed, falling back to HTML5 Audio:', err);
+    } catch (e) {
+      console.warn('Web Audio playback notice, falling back:', e);
       return false;
     }
   }
 
   /**
-   * Speak aloud using Bhashini IndicTTS or WebSpeech synthesis
+   * Universal Multilingual Text-To-Speech (TTS)
    */
-  public async speak(text: string, onEnd?: () => void, lang?: string) {
-    const cleanText = this.cleanTextForSpeech(text);
-    if (!cleanText) {
+  public async speak(text: string, onEnd?: () => void, forcedLanguage?: string): Promise<void> {
+    this.stopSpeaking();
+    const sessionId = ++this.currentSessionId;
+
+    if (!text || !text.trim()) {
       if (onEnd) onEnd();
       return;
     }
 
-    this.stopSpeaking();
-    this.currentSessionId += 1;
-    const sessionId = this.currentSessionId;
-    this.ensureAudioContext();
+    const cleanedText = this.cleanTextForSpeech(text);
+    if (!cleanedText) {
+      if (onEnd) onEnd();
+      return;
+    }
 
-    // 1. Attempt Bhashini Indic Neural Audio Stream
-    try {
-      const targetLang = lang || this.currentLang || 'en-IN';
-      const bhashiniPromise = bhashiniService.synthesizeSpeech(cleanText, targetLang);
-      
-      // Fast race with timeout (1.5s) to avoid UI latency
-      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
-      const bhashiniAudioUri = await Promise.race([bhashiniPromise, timeoutPromise]);
-      
-      if (bhashiniAudioUri && sessionId === this.currentSessionId) {
-        // A. Primary: Web Audio API with Volume Gain Boost
-        const playedWithWebAudio = await this.playWithWebAudio(bhashiniAudioUri, sessionId, onEnd);
-        if (playedWithWebAudio) {
-          return;
+    // Try Digital India Bhashini neural TTS for Indian languages
+    if (bhashiniService.isConfigured()) {
+      const bhashiniLang = forcedLanguage || 'en-IN';
+      try {
+        const audioDataUri = await bhashiniService.synthesizeSpeech(cleanedText, bhashiniLang);
+        if (audioDataUri && sessionId === this.currentSessionId) {
+          const played = await this.playWithWebAudio(audioDataUri, sessionId, onEnd);
+          if (played) return;
         }
-
-        // B. Secondary: Direct HTML5 Audio Element
-        if (sessionId === this.currentSessionId) {
-          const audio = new Audio(bhashiniAudioUri);
-          audio.volume = 1.0;
-          this.currentAudioElement = audio;
-
-          audio.onended = () => {
-            if (this.currentAudioElement === audio) {
-              this.currentAudioElement = null;
-            }
-            if (onEnd && sessionId === this.currentSessionId) onEnd();
-          };
-
-          audio.onerror = () => {
-            if (this.currentAudioElement === audio) {
-              this.currentAudioElement = null;
-            }
-            this.speakWebSpeechFallback(cleanText, onEnd, lang, sessionId);
-          };
-
-          try {
-            await audio.play();
-            return;
-          } catch (playErr) {
-            console.warn('Audio.play rejected, falling back to WebSpeech:', playErr);
-            this.speakWebSpeechFallback(cleanText, onEnd, lang, sessionId);
-            return;
-          }
-        }
+      } catch (err) {
+        console.warn('Bhashini TTS notice, falling back to WebSpeech:', err);
       }
-    } catch (e) {
-      console.warn('Bhashini synthesis notice:', e);
     }
 
-    // 2. High-Fidelity Immediate WebSpeech Synthesis Fallback
-    this.speakWebSpeechFallback(cleanText, onEnd, lang, sessionId);
-  }
-
-  private speakWebSpeechFallback(text: string, onEnd?: () => void, lang?: string, sessionId?: number) {
-    if (!this.synth && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      this.synth = window.speechSynthesis;
-    }
+    // High Quality WebSpeech Multi-Sentence Fallback
     if (!this.synth) {
       if (onEnd) onEnd();
       return;
     }
 
-    const activeSession = sessionId || ++this.currentSessionId;
+    const segments = this.splitIntoSegments(cleanedText, forcedLanguage);
+    let segmentIndex = 0;
 
-    try {
-      if (this.synth.paused) {
-        this.synth.resume();
+    const speakNext = () => {
+      if (sessionId !== this.currentSessionId) return;
+
+      if (segmentIndex >= segments.length) {
+        if (onEnd) onEnd();
+        return;
       }
-      this.synth.cancel();
 
-      if (!this.synth.getVoices() || this.synth.getVoices().length === 0) {
-        this.loadVoices();
+      const { text: segText, lang: segLang } = segments[segmentIndex];
+      segmentIndex++;
+
+      const utterance = new SpeechSynthesisUtterance(segText);
+      const voice = this.getBestVoiceForLang(segLang);
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+      } else {
+        utterance.lang = segLang;
       }
 
-      const segments = this.splitIntoSegments(text, lang);
-      let currentIndex = 0;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = Math.min(1.0, this.volumeMultiplier * 0.5);
 
-      const keepAlive = setInterval(() => {
-        if (this.synth && this.synth.speaking) {
-          this.synth.pause();
-          this.synth.resume();
-        } else {
-          clearInterval(keepAlive);
+      utterance.onend = () => {
+        if (sessionId === this.currentSessionId) {
+          speakNext();
         }
-      }, 5000);
-
-      const speakNextSegment = () => {
-        if (activeSession !== this.currentSessionId) {
-          clearInterval(keepAlive);
-          return;
-        }
-
-        if (currentIndex >= segments.length) {
-          clearInterval(keepAlive);
-          if (onEnd) onEnd();
-          return;
-        }
-
-        const segment = segments[currentIndex];
-        currentIndex++;
-
-        if (!segment.text.trim()) {
-          setTimeout(speakNextSegment, 10);
-          return;
-        }
-
-        const utterance = new SpeechSynthesisUtterance(segment.text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-
-        const voice = this.getBestVoiceForLang(segment.lang);
-        if (voice) {
-          utterance.voice = voice;
-          utterance.lang = voice.lang || segment.lang;
-        } else {
-          utterance.lang = segment.lang || 'en-US';
-        }
-
-        utterance.onend = () => {
-          if (activeSession === this.currentSessionId) {
-            setTimeout(() => {
-              if (activeSession === this.currentSessionId) {
-                speakNextSegment();
-              }
-            }, 30);
-          }
-        };
-
-        utterance.onerror = (e) => {
-          console.warn('TTS segment notice:', e);
-          if (activeSession === this.currentSessionId) {
-            if (e.error === 'interrupted' || e.error === 'canceled') {
-              clearInterval(keepAlive);
-              if (onEnd) onEnd();
-              return;
-            }
-            setTimeout(() => {
-              if (activeSession === this.currentSessionId) {
-                speakNextSegment();
-              }
-            }, 60);
-          }
-        };
-
-        setTimeout(() => {
-          if (this.synth && activeSession === this.currentSessionId) {
-            try {
-              if (this.synth.paused) this.synth.resume();
-              this.synth.speak(utterance);
-            } catch (speakErr) {
-              console.warn('Synth speak error:', speakErr);
-              clearInterval(keepAlive);
-              if (onEnd) onEnd();
-            }
-          }
-        }, 30);
       };
 
-      speakNextSegment();
-    } catch (err) {
-      console.warn('Speech synthesis notice:', err);
-      if (onEnd) onEnd();
-    }
+      utterance.onerror = (e) => {
+        if (sessionId === this.currentSessionId) {
+          speakNext();
+        }
+      };
+
+      this.synth?.speak(utterance);
+    };
+
+    speakNext();
   }
 
   public stopSpeaking() {
-    this.currentSessionId += 1;
+    this.currentSessionId++;
     if (this.currentAudioSourceNode) {
       try {
         this.currentAudioSourceNode.stop();
         this.currentAudioSourceNode.disconnect();
       } catch (e) {}
       this.currentAudioSourceNode = null;
-      this.currentGainNode = null;
     }
     if (this.currentAudioElement) {
       try {
         this.currentAudioElement.pause();
-        this.currentAudioElement.src = '';
+        this.currentAudioElement.currentTime = 0;
       } catch (e) {}
       this.currentAudioElement = null;
     }
     if (this.synth) {
-      try {
-        this.synth.cancel();
-      } catch (e) {}
+      this.synth.cancel();
     }
   }
 
   public isSpeaking(): boolean {
     return (
-      !!this.currentAudioSourceNode ||
-      (!!this.currentAudioElement && !this.currentAudioElement.paused) ||
-      (!!this.synth && this.synth.speaking)
+      (this.synth ? this.synth.speaking : false) ||
+      this.currentAudioSourceNode !== null ||
+      (this.currentAudioElement ? !this.currentAudioElement.paused : false)
     );
+  }
+
+  public getIsListening(): boolean {
+    return this.isListening;
   }
 }
 

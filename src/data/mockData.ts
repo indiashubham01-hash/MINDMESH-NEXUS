@@ -355,6 +355,43 @@ export const INITIAL_STUDENTS: Student[] = [
 
 export const INITIAL_DOCUMENTS: DocumentSource[] = [
   {
+    id: 'doc-open-source-ai-spec',
+    title: 'Open-Source AI Systems & Edge Architecture Specification (2026)',
+    filename: 'OpenSource_AI_Systems_Ollama_Whisper_2026.pdf',
+    type: 'curriculum_guide',
+    uploadDate: '2026-10-01',
+    versionYear: 2026,
+    trustScore: 99,
+    fileSize: '3.8 MB',
+    status: 'active',
+    relevantPages: 'Pages 1–18 (Local Ollama GGUF Quantization & Faster-Whisper ASR)',
+    summary: 'Authoritative specification for 100% offline edge AI deployment. Details INT4/INT8 GGUF model quantization, CTranslate2 acoustic transformer pipelines, sub-300ms speech inference, and zero cloud data egress.',
+    extractedSnippet: 'Open-source AI execution models enforce absolute data sovereignty: all audio streams and prompt tokens are computed on localhost without external API dependencies or recurring cloud billing.',
+    citationKey: 'IEEE Open-Source AI Spec 2026, pp. 1-18',
+    pdfPages: [
+      {
+        pageNumber: 1,
+        title: 'Section 1: Open-Source AI vs Cloud Black-Box Systems',
+        content: 'Open-Source AI decouples state-of-the-art reasoning from proprietary commercial APIs. By executing quantized open weights (Llama 3.2, Mistral, Qwen) directly on consumer CPU and GPU hardware, organizations achieve zero-egress data privacy, guaranteed uptime, and zero per-token cost.',
+        keyPoints: [
+          'Data Sovereignty: Voice and text data remain 100% offline within the local firewall.',
+          'Cost Predictability: Infinite token generation without per-token API charges.',
+          'Explainability: Full transparency into model weights, attention maps, and activations.'
+        ]
+      },
+      {
+        pageNumber: 2,
+        title: 'Section 2: Faster-Whisper CTranslate2 & Ollama Architecture',
+        content: 'Faster-Whisper leverages CTranslate2 to execute 8-bit quantized matrix multiplication and fused attention kernels, reducing memory by 70% and accelerating inference by 4x over vanilla Whisper. Ollama streams tokens via local HTTP sockets with GGUF quantization.',
+        keyPoints: [
+          'CTranslate2 INT8 Quantization: Sub-300ms acoustic decoding on standard laptop CPUs.',
+          'GGUF Format: Single-file quantized model weights optimized for fast memory mapping.',
+          'Edge Orchestration: Autonomous multi-agent verification with human-in-the-loop oversight.'
+        ]
+      }
+    ]
+  },
+  {
     id: 'doc-ncert-2026',
     title: 'NCERT Grade 7 Science - Chapter 1: Nutrition in Plants (2026 Revised)',
     filename: 'NCERT_Grade7_Science_Ch1_2026.pdf',
@@ -498,6 +535,323 @@ export const INITIAL_DOCUMENTS: DocumentSource[] = [
     ]
   }
 ];
+
+export const DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN: LessonPlan = {
+  id: 'lesson-os-ai-40',
+  topic: 'Open-Source AI Systems: Local Ollama LLM, Faster-Whisper ASR & Edge Orchestration',
+  topicHindi: 'ओपन-सोर्स एआई प्रणाली: स्थानीय ओलामा एलएलएम और फास्टर-व्हिस्पर एएसआर',
+  topicKannada: 'ಓಪನ್ ಸೋರ್ಸ್ ಎಐ ಸಿಸ್ಟಮ್ಸ್: ಲೋಕಲ್ ಒಲಾಮಾ ಎಲ್‌ಎಲ್‌ಎಂ ಮತ್ತು ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್ ಎಎಸ್‌ಆರ್',
+  grade: 12,
+  subject: 'Computer Science & Artificial Intelligence (Open-Source AI)',
+  totalDurationMinutes: 40,
+  targetExamDate: 'Next Friday (Oct 17, 2026)',
+  languages: ['English', 'Hindi', 'Kannada'],
+  predictedGapsCount: 2,
+  highRiskStudents: ['Rahul Sharma', 'Aarav Sharma'],
+  approvalState: 'draft',
+  lastUpdated: 'Just now',
+  
+  sourcesUsed: [
+    {
+      sourceId: 'doc-open-source-ai-spec',
+      citation: 'Open-Source AI Systems Specification 2026 (IEEE & Apache 2.0)',
+      reason: 'Authoritative ground truth for local quantized inference (GGUF), Faster-Whisper CTranslate2, and edge data sovereignty.'
+    },
+    {
+      sourceId: 'doc-ctranslate2-whisper',
+      citation: 'Faster-Whisper CTranslate2 Engine Architecture (Harvard NLP)',
+      reason: 'Acoustic transformer pipeline with INT8 quantization yielding sub-300ms speech-to-text without cloud dependencies.'
+    }
+  ],
+
+  ignoredSources: [
+    {
+      sourceId: 'doc-proprietary-cloud-api',
+      reason: 'Excluded closed-source proprietary cloud API notes due to telemetry tracking, privacy egress violations, and recurring token subscription fees.'
+    }
+  ],
+
+  beginnerExplanation: {
+    summary: 'Cloud AI is like ordering food from a big commercial restaurant where strangers see your order and charge you every bite. Open-Source AI brings the entire kitchen (Ollama LLM + Faster-Whisper ASR) right into your home laptop—100% private, free, and works without internet!',
+    summaryHindi: 'क्लाउड एआई एक रेस्तरां से खाना मंगाने जैसा है जहाँ आपका डेटा बाहरी सर्वर पर जाता है। ओपन-सोर्स एआई पूरी रसोई (ओलामा एलएलएम और फास्टर-व्हिस्पर) को आपके अपने लैपटॉप पर स्थापित करता है—पूरी तरह सुरक्षित, मुफ़्त और बिना इंटरनेट काम करने वाला!',
+    summaryKannada: 'ಕ್ಲೌಡ್ ಎಐ ಎಂಬುದು ಹೊರಗಿನ ಹೋಟೆಲ್‌ನಿಂದ ಆಹಾರ ತರಿಸಿಕೊಂಡಂತೆ, ಅಲ್ಲಿ ನಿಮ್ಮ ಡೇಟಾ ಹೊರಗೆ ಹೋಗುತ್ತದೆ. ಓಪನ್ ಸೋರ್ಸ್ ಎಐ ಸಂಪೂರ್ಣ ಅಡುಗೆಮನೆಯನ್ನು (ಒಲಾಮಾ ಮತ್ತು ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್) ನಿಮ್ಮದೇ ಲ್ಯಾಪ್‌ಟಾಪ್‌ನಲ್ಲಿ ಇರಿಸುತ್ತದೆ—ಸಂಪೂರ್ಣ ಖಾಸಗಿ, ಉಚಿತ ಮತ್ತು ಆಫ್‌ಲೈನ್!',
+    keyAnalogy: 'The "Edge Kitchen vs Cloud Commissary": Local Ollama = Private Chef on your laptop, Quantized GGUF Weights = Concentrated recipe book fitting inside your RAM, Faster-Whisper = High-speed ear transcribing your speech in 0.3s without sending sound waves outside your room.',
+    keyAnalogyHindi: 'निजी रसोई सादृश्य: स्थानीय ओलामा = आपका अपना शेफ, क्वांटाइज़्ड जीजीयूएफ = संपीड़ित रेसिपी बुक, फास्टर-व्हिस्पर = तेज़ कान जो आपकी आवाज़ को तुरंत टेक्स्ट में बदलता है।',
+    keyAnalogyKannada: 'ಖಾಸಗಿ ಅಡುಗೆಮನೆ ರೂಪಕ: ಲೋಕಲ್ ಒಲಾಮಾ = ನಿಮ್ಮದೇ ಖಾಸಗಿ ಮಾಸ್ಟರ್ ಚೆಫ್, ಜಿಜಿಯುಎಫ್ ತೂಕಗಳು = ನಿಮ್ಮ ಮೆಮೊರಿಯಲ್ಲಿ ಸುಲಭವಾಗಿ ಹೊಂದಿಕೊಳ್ಳುವ ಸೂತ್ರಗಳು, ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್ = 0.3 ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಧ್ವನಿಯನ್ನು ಗ್ರಹಿಸುವ ಸ್ಥಳೀಯ ಕಿವಿ.',
+    visualCues: [
+      'Microphone input routed directly to local 127.0.0.1 Faster-Whisper daemon (0ms cloud egress)',
+      'Ollama runtime streaming quantized Llama 3.2 tokens into the React UI',
+      'Living Learning Twin GNN visualizing student concept mastery gaps in real time'
+    ],
+    vocabularyGlossary: [
+      { term: 'Open-Source AI', hindiTerm: 'ओपन-सोर्स एआई', kannadaTerm: 'ಓಪನ್ ಸೋರ್ಸ್ ಎಐ', definition: 'Artificial Intelligence systems with publicly accessible weights, architecture, and code running locally without vendor lock-in' },
+      { term: 'Ollama & GGUF', hindiTerm: 'ओलामा और जीजीयूएफ', kannadaTerm: 'ಒಲಾಮಾ ಮತ್ತು ಜಿಜಿಯುಎಫ್', definition: 'Local runtime and quantized file format compressing large models to run smoothly on consumer CPU/RAM' },
+      { term: 'Faster-Whisper', hindiTerm: 'फास्टर-व्हिस्पर', kannadaTerm: 'ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್', definition: 'CTranslate2-powered speech recognition running locally with sub-300ms latency' },
+      { term: 'Data Sovereignty', hindiTerm: 'डेटा संप्रभुता (Data Sovereignty)', kannadaTerm: 'ಡೇಟಾ ಸಾರ್ವಭೌಮತ್ವ', definition: 'Full ownership and control of prompts and voice recordings without cloud transmission' }
+    ],
+    targetStudents: ['Rahul Sharma', 'Aarav Sharma']
+  },
+
+  standardLesson: {
+    objectives: [
+      'Explain the architectural difference between closed-source cloud APIs and open-source local inference (Ollama + Faster-Whisper).',
+      'Demonstrate how INT8/INT4 quantization reduces VRAM requirements by 4x without substantial loss in model perplexity.',
+      'Deploy an end-to-end local speech pipeline: Microphone -> Faster-Whisper CTranslate2 -> Ollama Llama 3.2 -> Local Audio TTS.'
+    ],
+    objectivesHindi: [
+      'क्लोज्ड-सोर्स क्लाउड एपीआई और ओपन-सोर्स लोकल इन्फरेंस (ओलामा + फास्टर-व्हिस्पर) के बीच अंतर स्पष्ट करें।',
+      'INT8/INT4 क्वांटाइज़ेशन के माध्यम से VRAM खपत को 70% कम करने की विधि प्रदर्शित करें।',
+      'एंड-टू-एंड स्थानीय स्पीच पाइपलाइन लागू करें: माइक्रोफ़ोन -> फास्टर-व्हिस्पर -> ओलामा लामा 3.2 -> स्थानीय ऑडियो।'
+    ],
+    sections: [
+      {
+        id: 'sec-os-1',
+        timeAllocationMinutes: 8,
+        title: 'Hook & Foundation: The Rise of Open-Source AI & Data Sovereignty',
+        titleHindi: 'प्रारंभिक परिचय: ओपन-सोर्स एआई और डेटा संप्रभुता',
+        titleKannada: 'ಪೀಠಿಕೆ: ಓಪನ್ ಸೋರ್ಸ್ ಎಐ ಮತ್ತು ಡೇಟಾ ಸಾರ್ವಭೌಮತ್ವದ ಮಹತ್ವ',
+        icon: 'Sparkles',
+        teacherTalkingPoints: [
+          'Show how closed-source cloud APIs introduce latency, API costs, downtime risk, and data privacy leaks.',
+          'Introduce the open-source alternative: Local open weights (Llama 3.2, Mistral, Qwen) executed via Ollama.',
+          'Demonstrate the local port 8000 Faster-Whisper endpoint responding in 280ms on local CPU.'
+        ],
+        teacherTalkingPointsHindi: [
+          'क्लाउड एपीआई की कमियों (डेटा प्राइवेसी, लागत, विलंबता) को समझाएं।',
+          'लोकल ओलामा और फास्टर-व्हिस्पर का लाइव प्रदर्शन करें।'
+        ],
+        teacherTalkingPointsKannada: [
+          'ಕ್ಲೌಡ್ ಎಐನ ಮಿತಿಗಳು (ವೆಚ್ಚ, ಗೌಪ್ಯತೆ ಉಲ್ಲಂಘನೆ) ಮತ್ತು ಓಪನ್ ಸೋರ್ಸ್ ಎಐನ ಪ್ರಯೋಜನಗಳನ್ನು ವಿವರಿಸಿ.',
+          'ಸ್ಥಳೀಯ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ನೇರವಾಗಿ ಚಲಿಸುವ ಒಲಾಮಾ ಮತ್ತು ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್ ಡೆಮೊ ತೋರಿಸಿ.'
+        ],
+        studentActivities: [
+          'Inspect network tab to verify zero packets leaving localhost during speech transcription.',
+          'Identify 3 real-world scenarios requiring 100% offline AI (hospitals, schools, defense).'
+        ],
+        scaffoldingTips: 'Highlight the Private Kitchen analogy for Rahul and Aarav.',
+        groundedInCitation: 'IEEE Open-Source AI Spec 2026, Section 2.1'
+      },
+      {
+        id: 'sec-os-2',
+        timeAllocationMinutes: 12,
+        title: 'Direct Instruction: Model Quantization & llama.cpp / Ollama Engine',
+        titleHindi: 'प्रत्यक्ष शिक्षण: मॉडल क्वांटाइज़ेशन और ओलामा आर्किटेक्चर',
+        titleKannada: 'ಮುಖ್ಯ ಬೋಧನೆ: ಮಾಡೆಲ್ ಕ್ವಾಂಟೈಸೇಶನ್ ಮತ್ತು ಒಲಾಮಾ ಎಂಜಿನ್',
+        icon: 'Cpu',
+        teacherTalkingPoints: [
+          'Explain weight quantization: Converting 16-bit floating point (FP16) weights to 4-bit/8-bit integers (INT4/INT8 GGUF).',
+          'Show the memory math: An 8B parameter model at FP16 requires 16 GB VRAM; quantized to Q4_K_M it fits comfortably in under 5.5 GB RAM!',
+          'Illustrate the Ollama HTTP streaming protocol: client sends JSON prompt, receives token-by-token NDJSON response stream.'
+        ],
+        teacherTalkingPointsHindi: [
+          'एफपी16 से आईएनटी4 में क्वांटाइज़ेशन का गणित समझाएं: 16 जीबी का मॉडल 5.5 जीबी रैम में समा जाता है।',
+          'ओलामा के टोकन स्ट्रीमिंग प्रोटोकॉल का अध्ययन करें।'
+        ],
+        teacherTalkingPointsKannada: [
+          'ತೂಕ ಕ್ವಾಂಟೈಸೇಶನ್ ತಂತ್ರಜ್ಞಾನ: 16 ಜಿಬಿ ಮೆಮೊರಿ ಬದಲಿಗೆ ಕೇವಲ 5.5 ಜಿಬಿಯಲ್ಲಿ 8 ಬಿಲಿಯನ್ ಪ್ಯಾರಾಮೀಟರ್ ಮಾಡೆಲ್ ಚಾಲನೆ.',
+          'ಒಲಾಮಾ ಲೈವ್ ಸ್ಟ್ರೀಮಿಂಗ್ ಮೂಲಕ ಒಂದೊಂದೇ ಪದಗಳನ್ನು ಉತ್ಪಾದಿಸುವ ವಿಧಾನ.'
+        ],
+        studentActivities: [
+          'Calculate RAM requirement for a 7B model at FP16 vs INT4 quantization.',
+          'Execute a test curl request to Ollama endpoint: http://localhost:11434/api/generate.'
+        ],
+        scaffoldingTips: 'Provide pre-calculated memory comparison matrix on the student portal.',
+        groundedInCitation: 'Ollama Technical Whitepaper (GGUF Format Spec)'
+      },
+      {
+        id: 'sec-os-3',
+        timeAllocationMinutes: 10,
+        title: 'Acoustic Processing: Faster-Whisper CTranslate2 Speech Pipeline',
+        titleHindi: 'ध्वनिक प्रसंस्करण: फास्टर-व्हिस्पर CTranslate2 पाइपलाइन',
+        titleKannada: 'ಧ್ವನಿ ಸಂಸ್ಕರಣೆ: ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್ ಮತ್ತು ಸಿಟ್ರಾನ್ಸ್‌ಲೇಟ್2 ಆರ್ಕಿಟೆಕ್ಚರ್',
+        icon: 'Mic',
+        teacherTalkingPoints: [
+          'Explain how raw audio is converted into 80-channel log Mel-Spectrograms at 16kHz sampling rate.',
+          'Introduce CTranslate2: A custom C++ inference engine that implements kernel fusion and 8-bit matrix multiplication.',
+          'Contrast with vanilla Whisper: Faster-Whisper is 4x faster with 70% less memory usage, achieving sub-second voice turnaround.'
+        ],
+        teacherTalkingPointsHindi: [
+          'ऑडियो को 80-चैनल मेल-स्पेक्ट्रोग्राम में बदलना और CTranslate2 के तीव्र C++ कर्नेल से प्रोसेस करना।'
+        ],
+        teacherTalkingPointsKannada: [
+          'ಧ್ವನಿ ತರಂಗಗಳನ್ನು ಸ್ಪೆಕ್ಟ್ರೋಗ್ರಾಮ್ ಆಗಿ ಪರಿವರ್ತಿಸಿ ಸಿಟ್ರಾನ್ಸ್‌ಲೇಟ್2 ಮೂಲಕ ಅತ್ಯಂತ ವೇಗವಾಗಿ ಡಿಕೋಡ್ ಮಾಡುವ ತಂತ್ರಜ್ಞಾನ.'
+        ],
+        studentActivities: [
+          'Speak a test voice command into the microphone and inspect the instantaneous transcript in the debug log.',
+          'Measure end-to-end latency from speech stop to token generation.'
+        ],
+        scaffoldingTips: 'Explain the difference between WebSpeech browser fallback and local Faster-Whisper.',
+        groundedInCitation: 'CTranslate2 Research Documentation (Harvard NLP)'
+      },
+      {
+        id: 'sec-os-4',
+        timeAllocationMinutes: 6,
+        title: 'Formative AI Checkpoint: Open-Source Architecture Quiz',
+        titleHindi: 'रचनात्मक मूल्यांकन: ओपन-सोर्स एआई क्विज़',
+        titleKannada: 'ರಚನಾತ್ಮಕ ಮೌಲ್ಯಮಾಪನ: ಓಪನ್ ಸೋರ್ಸ್ ಎಐ ರಸಪ್ರಶ್ನೆ',
+        icon: 'HelpCircle',
+        teacherTalkingPoints: [
+          'Administer 3 formative questions to evaluate student grasp of local inference, quantization, and offline ASR.',
+          'Review Living Learning Twin telemetry to ensure prerequisite gaps are closed.'
+        ],
+        teacherTalkingPointsHindi: [
+          'क्वांटाइज़ेशन और डेटा प्राइवेसी पर 3-प्रश्न क्विज़ हल कराएं।'
+        ],
+        teacherTalkingPointsKannada: [
+          'ವಿದ್ಯಾರ್ಥಿಗಳಿಗೆ 3 ಪ್ರಶ್ನೆಗಳ ರಸಪ್ರಶ್ನೆ ನೀಡಿ ಅವರ ಕಲಿಕಾ ಮಟ್ಟವನ್ನು ಪರಿಶೀಲಿಸಿ.'
+        ],
+        studentActivities: [
+          'Complete the 3 interactive diagnostic questions on student tablet.'
+        ],
+        scaffoldingTips: 'Review Rahul’s score in GGUF Quantization.',
+        groundedInCitation: 'Formative Evaluation Framework 2026'
+      },
+      {
+        id: 'sec-os-5',
+        timeAllocationMinutes: 4,
+        title: 'Wrap-Up & Human-in-the-Loop XAI Audit',
+        titleHindi: 'समीक्षा एवं मानव-नियंत्रित एक्सएआई ऑडिट',
+        titleKannada: 'ಮುಕ್ತಾಯ ಮತ್ತು ಎಕ್ಸ್‌ಪ್ಲೇನಬಲ್ ಎಐ ಲೆಡ್ಜರ್ ಪರಿಶೀಲನೆ',
+        icon: 'CheckCircle2',
+        teacherTalkingPoints: [
+          'Summarize the primary takeaways: Data Privacy, Zero Recurring Cloud Invoices, Offline Availability.',
+          'Reinforce Human-in-the-Loop oversight: AI proposes drafts; the human teacher makes the authoritative approval decision.'
+        ],
+        teacherTalkingPointsHindi: [
+          'मुख्य निष्कर्ष: डेटा सुरक्षा, शून्य एपीआई बिल, ऑफ़लाइन उपलब्धता और शिक्षक का अंतिम अनुमोदन।'
+        ],
+        teacherTalkingPointsKannada: [
+          'ಪ್ರಮುಖ ಅಂಶಗಳು: ಸಂಪೂರ್ಣ ಡೇಟಾ ಸುರಕ್ಷತೆ, ಉಚಿತ ಕಾರ್ಯಾಚರಣೆ, ಶಿಕ್ಷಕರ ಅಧಿಕೃತ ಅನುಮೋದನೆ.'
+        ],
+        studentActivities: [
+          'Draft an architecture diagram comparing Cloud vs Open-Source AI pipelines.'
+        ],
+        scaffoldingTips: 'Confirm all student risk status badges are green.',
+        groundedInCitation: 'NIST AI Risk Management Framework 2026'
+      }
+    ]
+  },
+
+  advancedActivity: {
+    title: 'Advanced Edge Inference & Quantization Benchmarking Challenge',
+    titleHindi: 'उच्च स्तरीय एज इन्फेरेंस और क्वांटाइज़ेशन बेंचमार्किंग चुनौती',
+    inquiryChallenge: 'Benchmark latency, perplexity, and VRAM utilization between Llama 3.2 8B Q4_K_M vs Q8_0 running on Local Ollama, and test Faster-Whisper ASR word-error-rate under 20dB ambient school classroom noise.',
+    inquiryChallengeHindi: 'लोकल ओलामा पर Llama 3.2 8B Q4_K_M और Q8_0 के बीच लेटेंसी और VRAM उपयोग की तुलना करें, और 20dB क्लासरूम शोर में फास्टर-व्हिस्पर की सटीकता मापें।',
+    deepQuestions: [
+      'How does FlashAttention-2 enable long-context transformer decoding on consumer GPUs without memory explosion?',
+      'Why does INT8 matrix multiplication preserve 99%+ of full-precision LLM reasoning accuracy?',
+      'What are the privacy and data sovereignty trade-offs between local on-device ASR and proprietary cloud speech APIs in educational environments?'
+    ],
+    extensionMaterials: [
+      'Ollama CLI Modelfile custom parameter tuning reference',
+      'Faster-Whisper CTranslate2 INT8 quantization benchmark suite',
+      'Web Audio API high-pass noise cancellation preprocessor demo'
+    ],
+    targetStudents: ['Vihaan Reddy', 'Ananya Iyer']
+  },
+
+  formativeQuiz: [
+    {
+      id: 'q-os-1',
+      question: 'What is the primary benefit of INT4/INT8 model quantization in local LLM deployments (such as Ollama)?',
+      questionHindi: 'लोकल एलएलएम डिप्लॉयमेंट में INT4/INT8 मॉडल क्वांटाइज़ेशन का मुख्य लाभ क्या है?',
+      questionKannada: 'ಲೋಕಲ್ ಎಲ್‌ಎಲ್‌ಎಂಗಳಲ್ಲಿ INT4/INT8 ಮಾಡೆಲ್ ಕ್ವಾಂಟೈಸೇಶನ್‌ನ ಮುಖ್ಯ ಪ್ರಯೋಜನವೇನು?',
+      options: [
+        'Increases parameter count by 4x to improve reasoning accuracy.',
+        'Reduces RAM/VRAM footprint by up to 70%, allowing 8B models to run smoothly on standard hardware.',
+        'Requires continuous cloud connectivity to download weights dynamically.',
+        'Converts LLMs into non-autoregressive decision trees.'
+      ],
+      optionsHindi: [
+        'पैरामीटर संख्या को 4 गुना बढ़ाता है।',
+        'रैम/वीआरैम की आवश्यकता को 70% तक घटाता है, जिससे 8B मॉडल सामान्य हार्डवेयर पर चलते हैं।',
+        'निरंतर क्लाउड कनेक्टिविटी की आवश्यकता होती है।',
+        'मॉडल को डिसीजन ट्री में बदल देता है।'
+      ],
+      correctAnswerIndex: 1,
+      explanation: 'Quantization maps FP16 weights to INT8 or INT4 integers, drastically shrinking model size and memory bandwidth demands with minimal degradation.',
+      explanationHindi: 'क्वांटाइज़ेशन FP16 भार को INT8 या INT4 पूर्णांकों में मैप करता है, जिससे सटीकता खोए बिना मॉडल का आकार और मेमोरी लोड भारी मात्रा में घट जाता है।',
+      targetedConcept: 'Model Weight Quantization (GGUF)',
+      difficulty: 'Medium'
+    },
+    {
+      id: 'q-os-2',
+      question: 'How does Faster-Whisper achieve sub-300ms speech-to-text inference compared to standard OpenAI Whisper?',
+      questionHindi: 'फास्टर-व्हिस्पर सामान्य व्हिस्पर की तुलना में 300ms से कम समय में ट्रांसक्रिप्शन कैसे करता है?',
+      questionKannada: 'ಫಾಸ್ಟರ್-ವಿಸ್ಪರ್ ಸಾಮಾನ್ಯ ವಿಸ್ಪರ್‌ಗಿಂತ 300ms ಗಿಂತ ಕಡಿಮೆ ಸಮಯದಲ್ಲಿ ಭಾಷಣವನ್ನು ಹೇಗೆ ಗ್ರಹಿಸುತ್ತದೆ?',
+      options: [
+        'By streaming audio chunks to proprietary Google cloud servers.',
+        'By skipping the acoustic transformer encoder stage entirely.',
+        'By utilizing CTranslate2 custom C++ compute kernels with 8-bit matrix multiplication and layer fusion.',
+        'By transcribing only every third word spoken.'
+      ],
+      optionsHindi: [
+        'ऑडियो को गूगल क्लाउड सर्वर पर भेजकर।',
+        'एन्कोडर स्टेज को पूरी तरह छोड़ कर।',
+        'CTranslate2 के 8-बिट मैट्रिक्स गुणन और फ्यूज्ड कर्नल इंजन का उपयोग करके।',
+        'केवल हर तीसरे शब्द को ट्रांसक्राइब करके।'
+      ],
+      correctAnswerIndex: 2,
+      explanation: 'Faster-Whisper leverages CTranslate2, a custom inference engine designed for high throughput on CPU and GPU with optimized INT8 quantized kernels.',
+      explanationHindi: 'फास्टर-व्हिस्पर CTranslate2 का उपयोग करता है, जो INT8 क्वांटाइज्ड कर्नल के साथ सीपीयू और जीपीयू पर तेज़ थ्रूपुट प्रदान करता है।',
+      targetedConcept: 'Faster-Whisper CTranslate2 Engine',
+      difficulty: 'Medium'
+    },
+    {
+      id: 'q-os-3',
+      question: 'Why does MINDMESH-NEXUS utilize Open-Source AI and Graph Neural Networks (GNNs) instead of black-box commercial APIs for educational diagnostics?',
+      questionHindi: 'माइंडमेश-नेक्सस डायग्नोस्टिक्स के लिए क्लोज्ड क्लाउड एपीआई के बजाय ओपन-सोर्स एआई और जीएनएन का उपयोग क्यों करता है?',
+      questionKannada: 'ಶೈಕ್ಷಣಿಕ ವಿಶ್ಲೇಷಣೆಗಾಗಿ ಮೈಂಡ್‌ಮೆಶ್-ನೆಕ್ಸಸ್ ಬ್ಲಾಕ್-ಬಾಕ್ಸ್ ಕ್ಲೌಡ್ ಬದಲಿಗೆ ಓಪನ್ ಸೋರ್ಸ್ ಎಐ ಮತ್ತು ಜಿಎನ್‌ಎನ್ ಅನ್ನು ಏಕೆ ಬಳಸುತ್ತದೆ?',
+      options: [
+        'Open-Source AI ensures 100% data sovereignty and student privacy, while GNNs explicitly model prerequisite concept graphs with transparent XAI attribution.',
+        'Commercial cloud APIs are strictly illegal in all schools.',
+        'Graph Neural Networks can only run on quantum supercomputers.',
+        'Open-source models cannot generate text or solve code.'
+      ],
+      optionsHindi: [
+        'ओपन-सोर्स एआई 100% डेटा संप्रभुता सुनिश्चित करता है, और जीएनएन पारदर्शी एक्सएआई के साथ आवश्यक अवधारणाओं का मॉडल बनाता है।',
+        'क्लाउड एपीआई स्कूलों में अवैध हैं।',
+        'जीएनएन केवल क्वांटम कंप्यूटर पर चल सकते हैं।',
+        'ओपन-सोर्स मॉडल टेक्स्ट नहीं बना सकते।'
+      ],
+      correctAnswerIndex: 0,
+      explanation: 'Open-Source AI guarantees data sovereignty (no student voice or records leave the school), while GNNs capture prerequisite DAG dependencies with auditable epistemic trust scores.',
+      explanationHindi: 'ओपन-सोर्स एआई डेटा संप्रभुता की गारंटी देता है (कोई छात्र डेटा स्कूल से बाहर नहीं जाता), और जीएनएन पारदर्शी एक्सएआई और ऑडिबल स्कोर प्रदान करते हैं।',
+      targetedConcept: 'Data Sovereignty & Pedagogical XAI',
+      difficulty: 'Hard'
+    }
+  ],
+
+  visualDiagram: {
+    title: 'Open-Source AI Architecture: Local Ollama LLM & Faster-Whisper Pipeline',
+    imageUrl: '/assets/opensource_ai_architecture.jpg',
+    caption: '100% Offline Edge Pipeline: Direct Microphone Audio -> Faster-Whisper CTranslate2 (INT8) -> Local Ollama Llama 3.2 (GGUF) -> Web Audio Studio Output with Zero Cloud Egress.',
+    captionHindi: '100% ऑफ़लाइन एज पाइपलाइन: माइक्रोफ़ोन -> फास्टर-व्हिस्पर CTranslate2 (INT8) -> स्थानीय ओलामा लामा 3.2 (GGUF) -> शून्य क्लाउड डेटा लीकेज।',
+    hotspots: [
+      {
+        label: 'Faster-Whisper Daemon (Port 8000)',
+        hindiLabel: 'फास्टर-व्हिस्पर डेमन (पोर्ट 8000)',
+        x: 25,
+        y: 40,
+        description: 'Sub-300ms local ASR using CTranslate2 INT8 quantization on consumer CPU.'
+      },
+      {
+        label: 'Ollama Llama 3.2 Runtime (Port 11434)',
+        hindiLabel: 'ओलामा लामा 3.2 रनटाइम',
+        x: 60,
+        y: 45,
+        description: 'Quantized GGUF open-weight foundation model running locally with zero cloud telemetry.'
+      },
+      {
+        label: 'Explainable AI & GNN Living Learning Twin',
+        hindiLabel: 'व्याख्यात्मक एआई और जीएनएन लर्निंग ट्विन',
+        x: 85,
+        y: 65,
+        description: 'PyTorch Geometric DAG tracing student prerequisite mastery and transparent feature weights.'
+      }
+    ]
+  }
+};
 
 export const DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN: LessonPlan = {
   id: 'lesson-photo-40',

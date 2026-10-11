@@ -355,30 +355,84 @@ Analyze the user utterance (which can be in English, Hindi, or Kannada) and outp
   /**
    * Whisper Audio Transcription on Groq Cloud
    */
-  public async transcribeAudio(audioBlob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.wav');
-    formData.append('model', 'whisper-large-v3-turbo');
-    formData.append('language', 'en');
+  public async transcribeAudio(audioBlob: Blob, language: string = 'en'): Promise<string> {
+    if (!audioBlob || audioBlob.size === 0) return '';
 
+    // Determine correct container file extension
+    let filename = 'audio.webm';
+    if (audioBlob.type.includes('wav')) filename = 'audio.wav';
+    else if (audioBlob.type.includes('mp4')) filename = 'audio.mp4';
+    else if (audioBlob.type.includes('ogg')) filename = 'audio.ogg';
+
+    // 1. Try Direct Groq Cloud Whisper API
     try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, filename);
+      formData.append('model', 'whisper-large-v3-turbo');
+      if (language && language !== 'Bilingual') {
+        const langCode = language.toLowerCase().includes('hi') ? 'hi' : (language.toLowerCase().includes('kn') ? 'kn' : 'en');
+        formData.append('language', langCode);
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
       const res = await fetch(`${this.baseUrl}/audio/transcriptions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`
         },
+        signal: controller.signal,
         body: formData
       });
 
+      clearTimeout(timeoutId);
+
       if (res.ok) {
         const data = await res.json();
-        return data.text || '';
+        if (data.text && data.text.trim()) {
+          return data.text.trim();
+        }
       }
     } catch (e) {
-      console.warn('Groq Whisper transcription error:', e);
+      console.warn('Groq Whisper direct transcription notice:', e);
     }
+
+    // 2. Try Backend Proxy Fallback
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const cleanB64 = result.includes(',') ? result.split(',')[1] : result;
+          resolve(cleanB64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+      });
+
+      const proxyRes = await fetch('http://127.0.0.1:8000/api/groq/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audio_base64: base64Data,
+          language: language.toLowerCase().includes('hi') ? 'hi' : (language.toLowerCase().includes('kn') ? 'kn' : 'en')
+        })
+      });
+
+      if (proxyRes.ok) {
+        const pData = await proxyRes.json();
+        if (pData.transcript && pData.transcript.trim()) {
+          return pData.transcript.trim();
+        }
+      }
+    } catch (proxyErr) {
+      console.warn('Groq backend proxy transcribe notice:', proxyErr);
+    }
+
     return '';
   }
 }
 
 export const groqService = new GroqService();
+

@@ -57,6 +57,10 @@ class BhashiniService {
     return { ...this.config };
   }
 
+  public isConfigured(): boolean {
+    return !!(this.config.apiKey && this.config.userId && this.config.activeMode !== 'webspeech');
+  }
+
   /**
    * Converts an audio Blob into base64 string
    */

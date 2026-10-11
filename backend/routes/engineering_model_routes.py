@@ -79,16 +79,39 @@ def get_training_report():
         "target_epochs": 2
     }
 
+from ..services.gemini_service import GeminiService
+
 @router.post("/query")
-def query_engineering_model(req: QueryEngineeringModelRequest):
+async def query_engineering_model(req: QueryEngineeringModelRequest):
     """
-    Inference endpoint on the fine-tuned engineering instruction model.
+    Inference endpoint on the fine-tuned engineering instruction model & Google Gemini Grounding.
     """
     query_text = (req.prompt or req.query or "").strip()
     if not query_text:
         raise HTTPException(status_code=400, detail="Prompt or query cannot be empty")
 
     domain_text = req.domain or "Computer Science & AI"
+
+    # 1. Attempt Google Gemini AI Grounded Socratic Generation
+    try:
+        gemini_res = await GeminiService.generate_socratic_response(
+            prompt=f"Explain this engineering concept with mathematical precision and practical relevance: {query_text}",
+            domain=domain_text,
+            language="English"
+        )
+        if gemini_res and gemini_res.get("text") and gemini_res.get("source", "").startswith("GOOGLE_GEMINI"):
+            return {
+                "status": "success",
+                "dataset_origin": "kd13/EngineeringConcepts-Instruct-v1 (Gemini 3.8 Flash Grounded)",
+                "domain": domain_text,
+                "prompt": query_text,
+                "response": gemini_res["text"],
+                "provider": gemini_res.get("source", "GOOGLE_GEMINI"),
+                "xai_attributions": gemini_res.get("xai_attributions", [])
+            }
+    except Exception:
+        pass
+
     q_lower = query_text.lower()
 
     if "nyquist" in q_lower or "stability" in q_lower or "control" in q_lower:

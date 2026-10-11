@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { VoiceCoPilotBar } from './components/VoiceCoPilotBar';
 import { LessonPlanView } from './components/LessonPlanView';
@@ -21,12 +21,15 @@ import { MobileQuickDrawer } from './components/MobileQuickDrawer';
 import { ExplainableAIChatBot } from './components/ExplainableAIChatBot';
 import { PageVoiceReader } from './components/PageVoiceReader';
 import { HierarchicalCurriculumBreadcrumb } from './components/HierarchicalCurriculumBreadcrumb';
+import { PPTDocumentStudio } from './components/PPTDocumentStudio';
+import { TeacherClassroomHub } from './components/TeacherClassroomHub';
 import { voiceService } from './services/voiceService';
 import { AgentEngine } from './services/agentEngine';
 import { authService, AuthUser } from './services/authService';
 import { sharedState } from './services/sharedStateManager';
 import { curriculumStateManager } from './services/curriculumState';
 import { 
+  DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN,
   DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN, 
   INITIAL_DOCUMENTS, 
   INITIAL_STUDENTS 
@@ -49,16 +52,16 @@ export function App() {
     const user = authService.getCurrentUser();
     return user ? user.role : 'student';
   });
-  const [activeTeacherTab, setActiveTeacherTab] = useState<'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph'>('lesson');
+  const [activeTeacherTab, setActiveTeacherTab] = useState<'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph' | 'documents'>('lesson');
   const [selectedLanguage, setSelectedLanguage] = useState<'English' | 'Hindi' | 'Kannada' | 'Bilingual'>(() => {
     const user = authService.getCurrentUser();
     return user?.preferredLanguage || 'English';
   });
   const [lessonPlan, setLessonPlan] = useState<LessonPlan>(() => {
     const activeCurr = curriculumStateManager.getState();
-    return activeCurr?.subject?.lessonPlan || DEFAULT_PHOTOSYNTHESIS_LESSON_40MIN;
+    return activeCurr?.subject?.lessonPlan || DEFAULT_OPEN_SOURCE_AI_LESSON_40MIN;
   });
-  const [documents, setDocuments] = useState<DocumentSource[]>(INITIAL_DOCUMENTS);
+  const [documents, setDocuments] = useState<DocumentSource[]>(() => sharedState.getDocuments());
   const [students, setStudents] = useState<Student[]>(() => sharedState.getStudents());
   const [curriculumTopics, setCurriculumTopics] = useState<CurriculumTopic[]>(() => sharedState.getCurriculumTopics());
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => sharedState.getCalendarEvents());
@@ -75,6 +78,7 @@ export function App() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [transcript, setTranscript] = useState<string>('');
+  const [audioLevel, setAudioLevel] = useState<number>(0);
   const [agentSpeechSummary, setAgentSpeechSummary] = useState<string>(
     'Welcome teacher! I am MINDMESH-NEXUS, your voice-first AI teaching co-pilot. Speak naturally in English, Hindi, or Kannada to generate or replan your lessons, resolve document conflicts, and scaffold for at-risk students.'
   );
@@ -84,6 +88,7 @@ export function App() {
   const [isBhashiniModalOpen, setIsBhashiniModalOpen] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   const [isPageReaderOpen, setIsPageReaderOpen] = useState<boolean>(false);
+  const lastExecutedCommandRef = useRef<{ cmd: string; time: number }>({ cmd: '', time: 0 });
 
   // Initialize Speech Recognition callbacks & Auto-Read Page on Open
   useEffect(() => {
@@ -96,6 +101,10 @@ export function App() {
       },
       (listening: boolean) => {
         setIsListening(listening);
+        if (!listening) setAudioLevel(0);
+      },
+      (level: number) => {
+        setAudioLevel(level);
       }
     );
 
@@ -104,6 +113,7 @@ export function App() {
       setStudents(sharedState.getStudents());
       setCurriculumTopics(sharedState.getCurriculumTopics());
       setCalendarEvents(sharedState.getCalendarEvents());
+      setDocuments(sharedState.getDocuments());
     });
 
     // Subscribe to real-time hierarchical curriculum changes (University > Scheme > Branch > Subject)
@@ -115,20 +125,19 @@ export function App() {
       }
     });
 
-    // Auto-Read Welcome Speech on Page Open
+    // Universal Welcome Speech on Page Open
     const welcomeIntro =
       selectedLanguage === 'Hindi'
-        ? 'माइंडमेश नेक्सस में आपका स्वागत है! आज का पाठ कक्षा 7 विज्ञान प्रकाश संश्लेषण है। हमने आपकी कक्षा के लिए 3-स्तरीय अनुकूलित पाठ तैयार किया है।'
+        ? 'माइंडमेश नेक्सस में आपका स्वागत है! आपका वॉयस एआई शिक्षण सह-पायलट सक्रिय है। किसी भी विषय पर पाठ योजना बनाने या सवाल पूछने के लिए माइक दबाएं।'
         : selectedLanguage === 'Kannada'
-        ? 'ಮೈಂಡ್‌ಮೆಶ್ ನೆಕ್ಸಸ್‌ಗೆ ಸುಸ್ವಾಗತ! ಇಂದಿನ ಪಾಠ 7ನೇ ತರಗತಿಯ ದ್ಯುತಿಸಂಶ್ಲೇಷಣೆ. ನಿಮ್ಮ ತರಗತಿಗಾಗಿ 3 ಹಂತದ ಪಾಠವನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗಿದೆ.'
-        : 'Welcome to MINDMESH-NEXUS! Today\'s lesson is Grade 7 Science Photosynthesis. We have adapted 3-tier scaffolds for your classroom and verified NCERT ground truth.';
+        ? 'ಮೈಂಡ್‌ಮೆಶ್ ನೆಕ್ಸಸ್‌ಗೆ ಸುಸ್ವಾಗತ! ನಿಮ್ಮ ಧ್ವನಿ ಎಐ ಬೋಧನಾ ಸಹಾಯಕ ಸಕ್ರಿಯವಾಗಿದೆ. ಯಾವುದೇ ವಿಷಯದ ಪಾಠ ಯೋಜನೆ ರಚಿಸಲು ಅಥವಾ ಪ್ರಶ್ನೆ ಕೇಳಲು ಮೈಕ್ ಕ್ಲಿಕ್ ಮಾಡಿ.'
+        : 'Welcome to MINDMESH-NEXUS! Your Voice AI Teaching Co-Pilot is active across all subjects. Tap the microphone to ask questions or create lesson plans in English, Hindi, or Kannada.';
 
-    const voiceLang = selectedLanguage === 'Kannada' ? 'kn-IN' : (selectedLanguage === 'Hindi' ? 'hi-IN' : 'en-IN');
+    setAgentSpeechSummary(welcomeIntro);
     
-    // Initial pipeline execution to populate initial audit trail
-    AgentEngine.executePipeline('I need a 40-minute Grade 7 science lesson on photosynthesis in English, Hindi, and Kannada.').then((res) => {
+    // Initial pipeline execution to populate initial audit trail without hardcoded topic
+    AgentEngine.executePipeline('System initialization: Autonomous curriculum reasoning and voice engine online').then((res) => {
       setSteps(res.steps);
-      setAgentSpeechSummary(res.speechSummary);
     }).catch(err => {
       console.warn('Initial pipeline warm up notice:', err);
     });
@@ -150,19 +159,19 @@ export function App() {
 
     const langFeedback: Record<string, { summary: string; voiceLang: string }> = {
       English: {
-        summary: 'English curriculum active. Grade 7 Photosynthesis lesson loaded with 3-tier differentiated scaffolding.',
+        summary: 'English curriculum active. Voice AI Teaching Co-Pilot ready with 3-tier differentiated scaffolding across all subjects.',
         voiceLang: 'en-IN'
       },
       Hindi: {
-        summary: 'हिंदी पाठ्यक्रम सक्रिय है। कक्षा 7 प्रकाश संश्लेषण पाठ और बहुभाषी व्याख्या लोड हो गई है।',
+        summary: 'हिंदी पाठ्यक्रम सक्रिय है। आपका वॉयस एआई शिक्षण सह-पायलट सभी विषयों में सहायता के लिए तैयार है।',
         voiceLang: 'hi-IN'
       },
       Kannada: {
-        summary: 'ಕನ್ನಡ ಪಠ್ಯಕ್ರಮ ಸಕ್ರಿಯವಾಗಿದೆ. 7ನೇ ತರಗತಿಯ ದ್ಯುತಿಸಂಶ್ಲೇಷಣೆ ಪಾಠ ಮತ್ತು ಪ್ರಶ್ನೋತ್ತರಗಳು ಸಿದ್ಧವಾಗಿವೆ.',
+        summary: 'ಕನ್ನಡ ಪಠ್ಯಕ್ರಮ ಸಕ್ರಿಯವಾಗಿದೆ. ಧ್ವನಿ ಎಐ ಬೋಧನಾ ಸಹಾಯಕ ಎಲ್ಲಾ ವಿಷಯಗಳಲ್ಲಿ ಸಹಾಯ ಮಾಡಲು ಸಿದ್ಧವಾಗಿದೆ.',
         voiceLang: 'kn-IN'
       },
       Bilingual: {
-        summary: 'Multilingual mode active in English, Hindi, and Kannada. प्रकाश संश्लेषण ಮತ್ತು ದ್ಯುತಿಸಂಶ್ಲೇಷಣೆ.',
+        summary: 'Multilingual mode active in English, Hindi, and Kannada. ಯಾವುದೇ ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಿ ಅಥವಾ ಪಾಠ ಯೋಜನೆ ರಚಿಸಿ.',
         voiceLang: 'Bilingual'
       }
     };
@@ -178,6 +187,18 @@ export function App() {
   // Handle Voice Command Execution
   const handleExecuteCommand = async (commandText: string) => {
     if (!commandText || !commandText.trim()) return;
+
+    const trimmed = commandText.trim();
+    if (trimmed.toLowerCase().startsWith('transcribing') || trimmed.toLowerCase().startsWith('listening')) {
+      return;
+    }
+
+    const now = Date.now();
+    if (lastExecutedCommandRef.current.cmd.toLowerCase() === trimmed.toLowerCase() && (now - lastExecutedCommandRef.current.time) < 1500) {
+      return;
+    }
+    lastExecutedCommandRef.current = { cmd: trimmed, time: now };
+
     setIsProcessing(true);
     await voiceService.stopListening().catch(() => {});
 
@@ -187,7 +208,7 @@ export function App() {
       });
 
       const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Pipeline execution timeout')), 5000)
+        setTimeout(() => reject(new Error('Pipeline execution timeout')), 18000)
       );
 
       const result = await Promise.race([pipelinePromise, timeoutPromise]).catch(async (e) => {
@@ -196,7 +217,9 @@ export function App() {
       });
 
       if (result) {
-        setLessonPlan(result.lessonPlan);
+        if (result.intent?.action !== 'general_qa' && result.lessonPlan) {
+          setLessonPlan(result.lessonPlan);
+        }
         setSteps(result.steps);
         setAgentSpeechSummary(result.speechSummary);
 
@@ -213,7 +236,7 @@ export function App() {
         // Route tab if requested, else maintain or switch to lesson
         if (result.intent?.actionOutcome?.targetTab) {
           setActiveTeacherTab(result.intent.actionOutcome.targetTab);
-        } else if (!result.intent?.actionOutcome) {
+        } else if (!result.intent?.actionOutcome && result.intent?.action !== 'general_qa') {
           setActiveTeacherTab('lesson');
         }
 
@@ -226,12 +249,15 @@ export function App() {
           });
         }
 
-        // Speak Siri/Alexa response aloud to the user
+        // Speak Siri/Alexa response aloud to the user in the matching human language
         if (result.speechSummary) {
           setIsSpeaking(true);
+          const isKannada = /[\u0C80-\u0CFF]/.test(result.speechSummary) || /[\u0C80-\u0CFF]/.test(commandText);
+          const isHindi = /[\u0900-\u097F]/.test(result.speechSummary) || /[\u0900-\u097F]/.test(commandText);
+          const responseVoiceLang = isKannada ? 'kn-IN' : (isHindi ? 'hi-IN' : (selectedLanguage === 'Kannada' ? 'kn-IN' : (selectedLanguage === 'Hindi' ? 'hi-IN' : 'en-IN')));
           voiceService.speak(result.speechSummary, () => {
             setIsSpeaking(false);
-          }, selectedLanguage);
+          }, responseVoiceLang);
         }
       }
 
@@ -243,25 +269,38 @@ export function App() {
   };
 
   const handleToggleListen = async () => {
+    if (isSpeaking) {
+      voiceService.stopSpeaking();
+      setIsSpeaking(false);
+    }
     if (isListening) {
       setIsListening(false);
       const text = await voiceService.stopListening();
-      const commandToRun = (text && text.trim().length > 2) ? text.trim() : transcript.trim();
+      const rawCmd = (text && text.trim().length > 2) ? text.trim() : transcript.trim();
+      const isPlaceholder = rawCmd.toLowerCase().startsWith('transcribing') || rawCmd.toLowerCase().startsWith('listening');
+      const commandToRun = isPlaceholder ? '' : rawCmd;
       if (commandToRun.length > 2) {
         setTranscript(commandToRun);
         handleExecuteCommand(commandToRun);
       }
     } else {
       const langCode = selectedLanguage === 'Kannada' ? 'kn-IN' : (selectedLanguage === 'Hindi' ? 'hi-IN' : 'en-IN');
+      setTranscript('');
+      setAgentSpeechSummary('');
       voiceService.setCallbacks(
         (text: string, isFinal: boolean) => {
           setTranscript(text);
-          if (isFinal && text.trim().length > 3) {
-            handleExecuteCommand(text);
+          const isPlaceholder = text.toLowerCase().startsWith('transcribing') || text.toLowerCase().startsWith('listening');
+          if (isFinal && !isPlaceholder && text.trim().length > 2) {
+            handleExecuteCommand(text.trim());
           }
         },
         (listening: boolean) => {
           setIsListening(listening);
+          if (!listening) setAudioLevel(0);
+        },
+        (level: number) => {
+          setAudioLevel(level);
         }
       );
       setIsListening(true);
@@ -399,7 +438,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/60 text-slate-900 flex flex-col selection:bg-sky-500/20 selection:text-sky-900">
+    <div className="min-h-screen bg-slate-50 bg-mesh-radial text-slate-900 flex flex-col selection:bg-blue-500/20 selection:text-blue-900 relative overflow-x-hidden">
       
       {/* Top Navigation with Persona Switcher & Auth Profile */}
       <Navbar
@@ -432,29 +471,34 @@ export function App() {
       <main className="flex-1 pb-24 md:pb-12">
         {currentPersona === 'teacher' ? (
           <>
-            {/* Main Voice Co-Pilot Bar for Teacher */}
-            <VoiceCoPilotBar
-              isListening={isListening}
-              isProcessing={isProcessing}
-              isSpeaking={isSpeaking}
-              transcript={transcript}
-              setTranscript={setTranscript}
-              onToggleListen={handleToggleListen}
-              onSubmitCommand={handleExecuteCommand}
-              onToggleSpeech={handleToggleSpeech}
-              agentSpeechSummary={agentSpeechSummary}
-              onOpenBhashiniConfig={() => setIsBhashiniModalOpen(true)}
-              onTogglePageReader={() => setIsPageReaderOpen(prev => !prev)}
-              isPageReaderOpen={isPageReaderOpen}
-            />
-
             {/* Teacher Dashboard Tabs */}
             {activeTeacherTab === 'lesson' && (
-              <LessonPlanView
-                lessonPlan={lessonPlan}
-                selectedLanguage={selectedLanguage}
-                onSpeakText={handleSpeakCustomText}
-              />
+              <>
+                {/* Main Voice Co-Pilot Bar for Teacher (Visible only on the first page / lesson tab) */}
+                <VoiceCoPilotBar
+                  isListening={isListening}
+                  isProcessing={isProcessing}
+                  isSpeaking={isSpeaking}
+                  transcript={transcript}
+                  audioLevel={audioLevel}
+                  setTranscript={setTranscript}
+                  onToggleListen={handleToggleListen}
+                  onSubmitCommand={handleExecuteCommand}
+                  onToggleSpeech={handleToggleSpeech}
+                  agentSpeechSummary={agentSpeechSummary}
+                  onOpenBhashiniConfig={() => setIsBhashiniModalOpen(true)}
+                  onTogglePageReader={() => setIsPageReaderOpen(prev => !prev)}
+                  isPageReaderOpen={isPageReaderOpen}
+                />
+
+                {/* Teacher Classroom Control Hub (Visible only on the first page / lesson tab) */}
+                <TeacherClassroomHub />
+                <LessonPlanView
+                  lessonPlan={lessonPlan}
+                  selectedLanguage={selectedLanguage}
+                  onSpeakText={handleSpeakCustomText}
+                />
+              </>
             )}
 
             {activeTeacherTab === 'curriculum' && (
@@ -474,10 +518,18 @@ export function App() {
               />
             )}
 
+            {activeTeacherTab === 'documents' && (
+              <PPTDocumentStudio
+                onOpenCalendar={() => setActiveTeacherTab('calendar')}
+                onOpenLesson={(topicId) => setActiveTeacherTab('lesson')}
+              />
+            )}
+
             {activeTeacherTab === 'sources' && (
               <ConflictResolutionView
                 documents={documents}
                 lessonPlan={lessonPlan}
+                onUploadMockDoc={(newDoc) => setDocuments(prev => [newDoc, ...prev.filter(d => d.id !== newDoc.id)])}
               />
             )}
 
@@ -511,6 +563,7 @@ export function App() {
           /* Student Multimodal Voice Workspace Dashboard (Isolated Account) */
           <StudentDashboard
             lessonPlan={lessonPlan}
+            documents={documents}
             students={students}
             currentUser={currentUser}
             onUpdateStudentScore={handleUpdateStudentScore}

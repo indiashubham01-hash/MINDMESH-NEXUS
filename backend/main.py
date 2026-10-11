@@ -1,7 +1,6 @@
-"""
-MINDMESH-NEXUS: Autonomous Voice-First AI Teaching Co-Pilot Backend Brain
-FastAPI Gateway with Epistemic Trust Engine, DKT Knowledge Tracing, and Agnes 3.0 Flash 512K Loop.
-"""
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,12 +16,14 @@ from .routes.agnes_routes import router as agnes_router
 from .routes.bhashini_routes import router as bhashini_router
 from .routes.gemini_routes import router as gemini_router
 from .routes.groq_routes import router as groq_router
+from .routes.ollama_routes import router as ollama_router
+from .routes.whisper_routes import router as whisper_router
 from .routes.engineering_model_routes import router as engineering_router
 from .services.agnes_client import AgnesService, token_queue
 
 app = FastAPI(
     title="MINDMESH-NEXUS Backend Brain",
-    description="Autonomous Voice-First AI Teaching Co-Pilot Backend with Groq Cloud LPU, Graph Neural Network (GNN), Google Gemini, Agnes 3.0 Flash, Digital India Bhashini Indic Voice AI, and EngineeringConcepts-Instruct-v1 Fine-Tuning Engine",
+    description="Autonomous Voice-First AI Teaching Co-Pilot Backend with Groq Cloud LPU, Local Ollama, Faster-Whisper ASR, Graph Neural Network (GNN), Google Gemini, Agnes 3.0 Flash, Digital India Bhashini Indic Voice AI, and EngineeringConcepts-Instruct-v1 Fine-Tuning Engine",
     version="2.5.0"
 )
 
@@ -47,19 +48,41 @@ app.include_router(agnes_router)
 app.include_router(bhashini_router)
 app.include_router(gemini_router)
 app.include_router(groq_router)
+app.include_router(ollama_router)
+app.include_router(whisper_router)
 app.include_router(engineering_router)
 
+from fastapi import Request, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+DIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
+ASSETS_DIR = os.path.join(DIST_DIR, "assets")
+
+if os.path.exists(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
 @app.get("/")
-def root_info():
+def root_info(request: Request):
+    accept = request.headers.get("accept", "")
+    index_path = os.path.join(DIST_DIR, "index.html")
+    # If opened in a web browser, serve the interactive React frontend directly
+    if "text/html" in accept and os.path.exists(index_path):
+        return FileResponse(index_path)
+
+    # Programmatic API response for status checks
     return {
         "project": "MINDMESH-NEXUS",
-        "description": "Voice-First AI Teaching Co-Pilot (The Brain)",
-        "platform_url": "https://platform.agnes-ai.com",
-        "api_base_url": "https://apihub.agnes-ai.com/v1",
-        "primary_llm": "agnes-3.0-flash (512K Context, Tool Calling)",
-        "visual_model": "agnes-image-2.5-flash (1024x1024)",
-        "rate_limit": "10 RPM Token Bucket Queue (Free Plan Compliant)",
+        "description": "Voice-First AI Teaching Co-Pilot (Unified Brain & Frontend)",
+        "frontend_url": "http://127.0.0.1:8000/",
+        "status": "OPERATIONAL",
+        "primary_llm": "gemini-3.8-flash (Google Gemini AI)",
+        "gemini_project": "projects/586089963185",
         "endpoints": [
+            "POST /api/gemini/chat",
+            "POST /api/gemini/parse-intent",
+            "POST /api/gemini/transcribe",
+            "POST /api/engineering/query",
             "POST /voice-request",
             "POST /resources/upload",
             "POST /plans/generate",
@@ -72,6 +95,15 @@ def root_info():
         "governance_rule": "Never let the AI silently publish content. Requires explicit teacher approval."
     }
 
+@app.get("/ui")
+@app.get("/app")
+@app.get("/dashboard")
+def serve_ui():
+    index_path = os.path.join(DIST_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"status": "Frontend not built yet. Run npm run build."}
+
 @app.get("/api/system/status")
 def system_status():
     return {
@@ -80,6 +112,7 @@ def system_status():
         "rpm_limit": 10,
         "token_queue_interval_seconds": 6.0,
         "active_models": {
+            "gemini": "gemini-3.8-flash (Project 586089963185)",
             "llm": "agnes-3.0-flash",
             "image": "agnes-image-2.5-flash",
             "video": "agnes-video-2.5",

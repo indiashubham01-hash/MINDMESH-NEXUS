@@ -18,16 +18,20 @@ import {
   Layers,
   Flame,
   Zap,
-  ChevronDown
+  ChevronDown,
+  Presentation
 } from 'lucide-react';
 import { LessonPlan } from '../types';
 import { AuthUser } from '../services/authService';
+import { OllamaConfigModal } from './OllamaConfigModal';
+import { ollamaService } from '../services/ollamaService';
+import { sharedState } from '../services/sharedStateManager';
 
 interface NavbarProps {
   currentPersona: 'teacher' | 'student';
   setCurrentPersona: (persona: 'teacher' | 'student') => void;
-  activeTeacherTab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph';
-  setActiveTeacherTab: (tab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph') => void;
+  activeTeacherTab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph' | 'documents';
+  setActiveTeacherTab: (tab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph' | 'documents') => void;
   lessonPlan: LessonPlan;
   isSpeaking: boolean;
   onToggleSpeech: () => void;
@@ -69,73 +73,92 @@ export const Navbar: React.FC<NavbarProps> = ({
   isPageReaderOpen,
 }) => {
   const [showAiMenu, setShowAiMenu] = useState(false);
+  const [showOllamaModal, setShowOllamaModal] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-xs">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
       
       {/* 1. Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-18 gap-2 sm:gap-4">
+        <div className="flex items-center justify-between h-15 sm:h-16 gap-2 sm:gap-4">
           
           {/* Left: Brand Identity */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3.5 flex-shrink-0">
-            <div className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white shadow-xs">
-              <Sparkles className="w-5 h-5" />
+          <div className="flex items-center space-x-2.5 sm:space-x-3 flex-shrink-0">
+            <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-blue-600 text-white shadow-xs">
+              <Sparkles className="w-4 h-4" />
             </div>
             
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 font-outfit">
-                  MINDMESH<span className="text-blue-600">-NEXUS</span>
+                <span className="font-bold text-base sm:text-lg tracking-tight text-slate-900 font-outfit">
+                  MINDMESH<span className="text-blue-600 font-normal">.NEXUS</span>
                 </span>
-                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-bold tracking-wide">
+                <span className="hidden sm:inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold tracking-wide border border-slate-200/60">
                   <Zap className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
-                  VOICE AI EDTECH
+                  VOICE AI
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium hidden sm:flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>Grade {lessonPlan.grade} {lessonPlan.subject}</span>
-                <span className="text-slate-300">•</span>
-                <span className="text-slate-700 font-semibold">NCERT 2026 Ground Truth</span>
-              </p>
             </div>
           </div>
 
-          {/* Center: Role-Based Workspace Indicator (Strictly Locked to Authenticated Role) */}
+          {/* Center: Role Switcher if not locked */}
           <div className="hidden md:flex items-center">
-            {currentUser ? null : (
-              <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
+            {currentUser ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 rounded-full text-xs font-medium text-slate-600 border border-slate-200/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>{currentPersona === 'teacher' ? '👨‍🏫 Educator Workspace' : '🎓 Student Socratic Workspace'}</span>
+              </div>
+            ) : (
+              <div className="flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200/60">
                 <button
                   onClick={() => setCurrentPersona('teacher')}
-                  className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                     currentPersona === 'teacher'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <span>👩‍🏫 Teacher Studio</span>
+                  <span>👨‍🏫 Teacher</span>
                 </button>
 
                 <button
                   onClick={() => setCurrentPersona('student')}
-                  className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                     currentPersona === 'student'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <span>🎓 Student Arena</span>
+                  <span>🎓 Student</span>
                 </button>
               </div>
             )}
+
+            {/* Quick Classroom Code Pill */}
+            <div className="hidden lg:flex items-center ml-2.5">
+              {currentPersona === 'teacher' ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50/90 border border-amber-200/90 rounded-lg text-xs font-semibold text-amber-950 shadow-xs">
+                  <span className="text-[10px] uppercase font-bold text-amber-700">Class:</span>
+                  <span className="font-mono font-black text-slate-900 tracking-wider">{sharedState.getClassroomCode()}</span>
+                </div>
+              ) : (
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border shadow-xs ${
+                  sharedState.isStudentConnected() 
+                    ? 'bg-emerald-50 text-emerald-950 border-emerald-200' 
+                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${sharedState.isStudentConnected() ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                  <span>{sharedState.isStudentConnected() ? `Synced: ${sharedState.getClassroomCode()}` : 'Class Offline'}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right: Consolidated Action Toolbar */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2.5">
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
             
             {/* Language Selector Pill */}
-            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5 text-xs">
+            <div className="flex items-center bg-slate-100/90 border border-slate-200/80 rounded-lg p-0.5 text-xs">
               <Languages className="w-3.5 h-3.5 text-slate-500 ml-1.5 mr-0.5 hidden lg:inline" />
               <button
                 onClick={() => setSelectedLanguage('English')}
@@ -276,6 +299,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </button>
                   )}
 
+                  {/* Local Ollama Open-Source AI */}
+                  <button
+                    onClick={() => { setShowAiMenu(false); setShowOllamaModal(true); }}
+                    className="w-full flex items-center justify-between p-2 rounded-lg bg-orange-50/90 hover:bg-orange-100 text-orange-950 text-xs font-medium border border-orange-200 transition-all text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🦙</span>
+                      <div>
+                        <div className="font-semibold flex items-center gap-1">
+                          <span>Local Ollama</span>
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-orange-200 text-orange-900 font-mono font-bold">Llama 3.2</span>
+                        </div>
+                        <div className="text-[10px] text-orange-700">:11434 Offline LLM Engine</div>
+                      </div>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded bg-orange-200/80 text-[9px] text-orange-950 font-bold">Local</span>
+                  </button>
+
                   <button
                     onClick={() => { setShowAiMenu(false); onOpenAgnesConfig(); }}
                     className="w-full flex items-center justify-between p-2 rounded-lg bg-blue-50 hover:bg-blue-100/80 text-blue-900 text-xs font-medium border border-blue-200 transition-all text-left cursor-pointer"
@@ -357,23 +398,23 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* 2. Secondary Teacher Command Bar */}
+      {/* 2. Minimalist Secondary Teacher Command Ribbon */}
       {currentPersona === 'teacher' && (
-        <div className="hidden md:block w-full bg-slate-50/90 border-t border-slate-200 py-2">
+        <div className="hidden md:block w-full bg-white/70 backdrop-blur-sm border-t border-slate-200/60 py-1.5">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 overflow-x-auto">
             
             {/* Teacher Category Tabs */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto py-0.5 scrollbar-none">
+            <div className="flex items-center space-x-1 overflow-x-auto py-0.5 scrollbar-none">
               <button
                 onClick={() => setActiveTeacherTab('lesson')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
                   activeTeacherTab === 'lesson'
                     ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>3-Tier Lesson Studio</span>
+                <span>3-Tier Studio</span>
                 {lessonPlan.isReplanned && (
                   <span className={`ml-1 px-1.5 py-0.2 text-[9px] rounded font-bold ${
                     activeTeacherTab === 'lesson' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
@@ -384,39 +425,61 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveTeacherTab('curriculum')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  activeTeacherTab === 'curriculum'
-                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                onClick={() => setActiveTeacherTab('documents')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
+                  activeTeacherTab === 'documents'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Curriculum Modules</span>
+                <Presentation className="w-3.5 h-3.5" />
+                <span>PPT & Flowchart</span>
+                <span className={`ml-1 px-1.5 py-0.2 text-[9px] rounded font-bold ${
+                  activeTeacherTab === 'documents' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-900'
+                }`}>
+                  DAG
+                </span>
               </button>
 
               <button
                 onClick={() => setActiveTeacherTab('calendar')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
                   activeTeacherTab === 'calendar'
                     ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
                 }`}
               >
                 <CalendarIcon className="w-3.5 h-3.5" />
-                <span>Classroom Planner</span>
+                <span>Planner</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTeacherTab('students')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
+                  activeTeacherTab === 'students'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Learners & Risk</span>
+                <span className={`ml-1 px-1.5 py-0.2 text-[9px] rounded font-bold ${
+                  activeTeacherTab === 'students' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
+                }`}>
+                  {lessonPlan.predictedGapsCount} At Risk
+                </span>
               </button>
 
               <button
                 onClick={() => setActiveTeacherTab('sources')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
                   activeTeacherTab === 'sources'
                     ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Source Trust & Conflicts</span>
+                <span>Source Trust</span>
                 {lessonPlan.ignoredSources.length > 0 && (
                   <span className={`ml-1 px-1.5 py-0.2 text-[9px] rounded font-bold ${
                     activeTeacherTab === 'sources' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
@@ -427,32 +490,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveTeacherTab('students')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  activeTeacherTab === 'students'
+                onClick={() => setActiveTeacherTab('curriculum')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
+                  activeTeacherTab === 'curriculum'
                     ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
                 }`}
               >
-                <Users className="w-3.5 h-3.5" />
-                <span>Learner Twins & Risk</span>
-                <span className={`ml-1 px-1.5 py-0.2 text-[9px] rounded font-bold ${
-                  activeTeacherTab === 'students' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
-                }`}>
-                  {lessonPlan.predictedGapsCount} At Risk
-                </span>
+                <Layers className="w-3.5 h-3.5" />
+                <span>Modules</span>
               </button>
 
               <button
                 onClick={() => setActiveTeacherTab('graph')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap ${
                   activeTeacherTab === 'graph'
                     ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    : 'bg-slate-100/70 hover:bg-slate-200/60 text-slate-700 font-medium'
                 }`}
               >
                 <Network className="w-3.5 h-3.5 text-blue-500" />
-                <span>GNN Knowledge Graph</span>
+                <span>GNN Graph</span>
               </button>
             </div>
 
@@ -486,6 +544,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       )}
+
+      {/* Local Ollama Configuration Modal */}
+      <OllamaConfigModal
+        isOpen={showOllamaModal}
+        onClose={() => setShowOllamaModal(false)}
+      />
 
     </header>
   );

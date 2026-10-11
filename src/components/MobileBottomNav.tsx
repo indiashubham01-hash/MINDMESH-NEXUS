@@ -19,8 +19,8 @@ import { LessonPlan } from '../types';
 interface MobileBottomNavProps {
   currentPersona: 'teacher' | 'student';
   setCurrentPersona: (persona: 'teacher' | 'student') => void;
-  activeTeacherTab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph';
-  setActiveTeacherTab: (tab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph') => void;
+  activeTeacherTab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph' | 'documents';
+  setActiveTeacherTab: (tab: 'lesson' | 'curriculum' | 'calendar' | 'sources' | 'students' | 'graph' | 'documents') => void;
   isListening: boolean;
   isProcessing: boolean;
   onToggleListen: () => void;

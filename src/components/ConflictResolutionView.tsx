@@ -19,6 +19,7 @@ import {
 import { DocumentSource, LessonPlan } from '../types';
 import { DocumentReaderModal } from './DocumentReaderModal';
 import { apiClient } from '../services/apiClient';
+import { sharedState } from '../services/sharedStateManager';
 
 interface ConflictResolutionViewProps {
   documents: DocumentSource[];
@@ -29,8 +30,13 @@ interface ConflictResolutionViewProps {
 export const ConflictResolutionView: React.FC<ConflictResolutionViewProps> = ({
   documents: initialDocuments,
   lessonPlan,
+  onUploadMockDoc,
 }) => {
   const [docList, setDocList] = useState<DocumentSource[]>(initialDocuments);
+
+  React.useEffect(() => {
+    setDocList(initialDocuments);
+  }, [initialDocuments]);
   const [selectedDoc, setSelectedDoc] = useState<DocumentSource>(initialDocuments[0]);
   const [filter, setFilter] = useState<'all' | 'active' | 'conflicts'>('all');
   
@@ -122,6 +128,11 @@ export const ConflictResolutionView: React.FC<ConflictResolutionViewProps> = ({
           authority_score: newDoc.trustScore / 100.0
         }).catch(() => {});
 
+        sharedState.addDocument(newDoc);
+        if (onUploadMockDoc) {
+          onUploadMockDoc(newDoc);
+        }
+
         setDocList(prev => [newDoc, ...prev]);
         setSelectedDoc(newDoc);
         setIsUploading(false);
@@ -183,6 +194,11 @@ export const ConflictResolutionView: React.FC<ConflictResolutionViewProps> = ({
             }
           ]
         };
+
+        sharedState.addDocument(newDoc);
+        if (onUploadMockDoc) {
+          onUploadMockDoc(newDoc);
+        }
 
         setDocList(prev => [newDoc, ...prev]);
         setSelectedDoc(newDoc);

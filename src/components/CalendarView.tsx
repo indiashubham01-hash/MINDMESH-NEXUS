@@ -47,8 +47,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onOpenLesson,
 }) => {
   const [events, setEvents] = useState<CalendarEvent[]>(() => {
-    return initialEvents && initialEvents.length > 0 ? initialEvents : sharedState.getCalendarEvents();
+    if (initialEvents !== undefined) return initialEvents;
+    if (currentPersona === 'student' && !sharedState.isStudentConnected()) return [];
+    return sharedState.getCalendarEvents();
   });
+  const [classroomCode, setClassroomCode] = useState<string>(() => sharedState.getClassroomCode());
+  const [isStudentConnected, setIsStudentConnected] = useState<boolean>(() => sharedState.isStudentConnected());
+
+  useEffect(() => {
+    if (initialEvents !== undefined) {
+      setEvents(initialEvents);
+    }
+  }, [initialEvents]);
 
   // Calendar View Mode: 'month' (default) | 'week' | 'list' | 'day'
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'list' | 'day'>('month');
@@ -73,10 +83,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   // Subscribe to real-time shared state updates
   useEffect(() => {
     const unsub = sharedState.subscribe(() => {
-      setEvents(sharedState.getCalendarEvents());
+      setClassroomCode(sharedState.getClassroomCode());
+      const connected = sharedState.isStudentConnected();
+      setIsStudentConnected(connected);
+      if (initialEvents !== undefined) {
+        setEvents(initialEvents);
+      } else if (currentPersona === 'student' && !connected) {
+        setEvents([]);
+      } else {
+        setEvents(sharedState.getCalendarEvents());
+      }
     });
     return unsub;
-  }, []);
+  }, [initialEvents, currentPersona]);
 
   // Filter events
   const filteredEvents = events.filter((e) => {
@@ -171,12 +190,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         {/* Title and Top Level Info */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5 flex-wrap">
               <span>Calendar Overview</span>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live Cross-Portal Synced
-              </span>
+              {currentPersona === 'teacher' ? (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Broadcasting to Class: {classroomCode}
+                </span>
+              ) : isStudentConnected ? (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Synced with Class: {classroomCode}
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                  Classroom Not Synced (Offline)
+                </span>
+              )}
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               View your calendar with student classes, exams, and holidays.

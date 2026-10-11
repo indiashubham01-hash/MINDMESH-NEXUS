@@ -168,10 +168,63 @@
   box-shadow: 0 1px 3px 0 rgba(217, 119, 6, 0.06);
 }
 
-/* Clean Pills */
-.pill-3d {
-  border-radius: 9999px;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+/* Ambient Mesh Glow & Advanced Glassmorphism */
+.glass-pro {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.05);
+}
+
+.glass-pro-dark {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.25);
+}
+
+.glass-glow-blue {
+  box-shadow: 0 0 25px -5px rgba(37, 99, 235, 0.25), 0 8px 24px -4px rgba(15, 23, 42, 0.06);
+}
+
+.glass-glow-rose {
+  box-shadow: 0 0 30px -5px rgba(225, 29, 72, 0.35), 0 8px 24px -4px rgba(15, 23, 42, 0.08);
+}
+
+.glass-glow-emerald {
+  box-shadow: 0 0 25px -5px rgba(5, 150, 105, 0.25), 0 8px 24px -4px rgba(15, 23, 42, 0.06);
+}
+
+/* Radiant Shimmer Text */
+.text-gradient-blue {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-purple {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Pulsating Acoustic Glow */
+@keyframes acousticPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5), 0 0 0 0 rgba(6, 182, 212, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(37, 99, 235, 0), 0 0 0 24px rgba(6, 182, 212, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0), 0 0 0 0 rgba(6, 182, 212, 0);
+  }
+}
+
+.animate-acoustic-pulse {
+  animation: acousticPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* Soundwave animations for Bhashini voice */
@@ -186,11 +239,18 @@
   animation: soundwave3d 1.1s ease-in-out infinite;
 }
 
-/* Clean background grid pattern */
-.bg-grid-pattern {
-  background-size: 24px 24px;
+/* Ambient Radial Mesh Background Pattern */
+.bg-mesh-radial {
   background-image: 
-    linear-gradient(to right, rgba(226, 232, 240, 0.4) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
+    radial-gradient(at 15% 15%, rgba(59, 130, 246, 0.07) 0px, transparent 50%),
+    radial-gradient(at 85% 10%, rgba(139, 92, 246, 0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 80%, rgba(14, 165, 233, 0.05) 0px, transparent 50%);
+}
+
+.bg-grid-pattern {
+  background-size: 28px 28px;
+  background-image: 
+    linear-gradient(to right, rgba(226, 232, 240, 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.5) 1px, transparent 1px);
 }
 

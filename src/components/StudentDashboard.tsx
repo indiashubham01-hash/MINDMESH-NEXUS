@@ -38,18 +38,27 @@ import {
   ShieldCheck,
   Cpu,
   ExternalLink,
-  Bookmark
+  Bookmark,
+  Link,
+  Unlink,
+  Lock,
+  Unlock,
+  Download,
+  Search,
+  Copy
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { LessonPlan, Student, StudentIntervention, StudentAssessmentRecord, CalendarEvent } from '../types';
+import { LessonPlan, Student, StudentIntervention, StudentAssessmentRecord, CalendarEvent, DocumentSource } from '../types';
 import { AuthUser } from '../services/authService';
 import { sharedState } from '../services/sharedStateManager';
 import { apiClient } from '../services/apiClient';
 import { CalendarView } from './CalendarView';
 import { FormativeQuizEngine } from './FormativeQuizEngine';
+import { DocumentReaderModal } from './DocumentReaderModal';
 
 interface StudentDashboardProps {
   lessonPlan: LessonPlan;
+  documents?: DocumentSource[];
   students: Student[];
   onUpdateStudentScore: (studentId: string, quizScore: number) => void;
   onSpeakText: (text: string, lang?: string) => void;
@@ -62,6 +71,7 @@ interface StudentDashboardProps {
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   lessonPlan,
+  documents,
   students,
   onUpdateStudentScore,
   onSpeakText,
@@ -132,10 +142,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
   const [isQuizSubmitted, setIsQuizSubmitted] = useState<boolean>(false);
 
-  // Interventions State
-  const [interventions, setInterventions] = useState<StudentIntervention[]>(() => sharedState.getInterventions());
+  // Classroom Portal Connection & Isolation State
+  const [isClassroomConnected, setIsClassroomConnected] = useState<boolean>(() => sharedState.isStudentConnected());
+  const [teacherClassroomCode, setTeacherClassroomCode] = useState<string>(() => sharedState.getClassroomCode());
+  const [studentInputCode, setStudentInputCode] = useState<string>('');
+  const [connectionMessage, setConnectionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Interventions & Calendar: ONLY populated when isClassroomConnected is true!
+  const [interventions, setInterventions] = useState<StudentIntervention[]>(() => 
+    sharedState.isStudentConnected() ? sharedState.getInterventions() : []
+  );
   const [assessments, setAssessments] = useState<StudentAssessmentRecord[]>(() => sharedState.getAssessments());
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => sharedState.getCalendarEvents());
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => 
+    sharedState.isStudentConnected() ? sharedState.getCalendarEvents() : []
+  );
   const [isReassessmentOpen, setIsReassessmentOpen] = useState<boolean>(false);
   const [activeIntervention, setActiveIntervention] = useState<StudentIntervention | null>(null);
 
@@ -143,6 +163,57 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [reassessmentQIndex, setReassessmentQIndex] = useState<number>(0);
   const [reassessmentAnswers, setReassessmentAnswers] = useState<Record<number, number>>({});
   const [isReassessmentSubmitted, setIsReassessmentSubmitted] = useState<boolean>(false);
+
+  // Source Trust Uploaded Documents & PDF Reader State
+  const [syncedDocs, setSyncedDocs] = useState<DocumentSource[]>(() => 
+    documents && documents.length > 0 ? documents : sharedState.getDocuments()
+  );
+  const [isReaderModalOpen, setIsReaderModalOpen] = useState<boolean>(false);
+  const [readerDoc, setReaderDoc] = useState<DocumentSource | null>(null);
+  const [docSearchQuery, setDocSearchQuery] = useState<string>('');
+  const [copiedFormulaText, setCopiedFormulaText] = useState<string | null>(null);
+
+  // Synchronize documents if parent prop updates
+  useEffect(() => {
+    if (documents && documents.length > 0) {
+      setSyncedDocs(documents);
+    }
+  }, [documents]);
+
+  const handleOpenDocReader = (doc: DocumentSource) => {
+    setReaderDoc(doc);
+    setIsReaderModalOpen(true);
+  };
+
+  const handleCopyFormula = (formulaText: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(formulaText);
+    }
+    setCopiedFormulaText(formulaText);
+    setTimeout(() => setCopiedFormulaText(null), 2500);
+  };
+
+  const handleDownloadDoc = (doc: DocumentSource) => {
+    if (doc.fileBlobUrl) {
+      const a = document.createElement('a');
+      a.href = doc.fileBlobUrl;
+      a.download = doc.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else {
+      const pageText = (doc.pdfPages || []).map(p => `Page ${p.pageNumber}: ${p.title}\n${p.content}\n${(p.keyPoints || []).join('\n')}`).join('\n\n');
+      const blob = new Blob([`${doc.title}\n\n${doc.summary}\n\nKey Snippet:\n${doc.extractedSnippet || ''}\n\n${pageText}`], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.filename.replace(/\.pdf$/, '.txt');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
 
   const questions = lessonPlan?.formativeQuiz || [];
   const currentQ = (questions.length > 0 && currentQIndex < questions.length) ? questions[currentQIndex] : (questions[0] || {
@@ -155,12 +226,52 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   // Subscribe to shared browser state updates
   useEffect(() => {
     const unsub = sharedState.subscribe(() => {
-      setInterventions(sharedState.getInterventions());
+      const connected = sharedState.isStudentConnected();
+      setIsClassroomConnected(connected);
+      setTeacherClassroomCode(sharedState.getClassroomCode());
       setAssessments(sharedState.getAssessments());
-      setCalendarEvents(sharedState.getCalendarEvents());
+      setSyncedDocs(sharedState.getDocuments());
+
+      if (connected) {
+        setInterventions(sharedState.getInterventions());
+        setCalendarEvents(sharedState.getCalendarEvents());
+      } else {
+        setInterventions([]);
+        setCalendarEvents([]);
+      }
     });
     return unsub;
   }, []);
+
+  const handleConnectClassroom = (codeToJoin?: string) => {
+    const targetCode = (codeToJoin || studentInputCode).trim().toUpperCase();
+    if (!targetCode) {
+      setConnectionMessage({ type: 'error', text: 'Please enter a classroom code.' });
+      return;
+    }
+
+    const res = sharedState.connectStudentToClassroom(targetCode, currentStudent.name);
+    if (res.success) {
+      setIsClassroomConnected(true);
+      setCalendarEvents(sharedState.getCalendarEvents());
+      setInterventions(sharedState.getInterventions());
+      setConnectionMessage({ type: 'success', text: res.message });
+      setStudentInputCode('');
+      confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+      setTimeout(() => setConnectionMessage(null), 5000);
+    } else {
+      setConnectionMessage({ type: 'error', text: res.message });
+    }
+  };
+
+  const handleDisconnectClassroom = () => {
+    sharedState.disconnectStudent(currentStudent.name);
+    setIsClassroomConnected(false);
+    setCalendarEvents([]);
+    setInterventions([]);
+    setConnectionMessage({ type: 'error', text: 'Disconnected from classroom. Timetable and live updates paused.' });
+    setTimeout(() => setConnectionMessage(null), 4000);
+  };
 
   // Check active intervention for current student
   const studentActiveIntervention = interventions.find(
@@ -525,7 +636,121 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
       </div>
 
-      {/* 2. Active Remedial Intervention Alert Banner */}
+      {/* 2. CLASSROOM CONNECTION STATUS & JOIN PORTAL CARD */}
+      {isClassroomConnected ? (
+        <div className="rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center flex-shrink-0">
+              <Link className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-800">
+                  CLASSROOM SYNCHRONIZED
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-mono font-bold text-xs tracking-wider shadow-xs">
+                  {teacherClassroomCode}
+                </span>
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                  Live Sync Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                Connected to Teacher Dashboard. All calendar timetables, class schedules, and lesson updates are synchronized in real-time.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={handleDisconnectClassroom}
+              className="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-rose-300 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Unlink className="w-3.5 h-3.5" />
+              <span>Disconnect / Leave Class</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-gradient-to-r from-amber-50 via-slate-50 to-indigo-50 border border-amber-200/80 p-5 shadow-sm space-y-3.5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">
+                    Classroom Not Connected (Standalone Mode)
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                    Isolated
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5 max-w-xl">
+                  Enter the 6-character Classroom Code generated by your teacher to synchronize your course calendar, live timetable updates, and broadcasted lessons.
+                </p>
+              </div>
+            </div>
+
+            {/* Code Input Form */}
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-48">
+                <input
+                  type="text"
+                  value={studentInputCode}
+                  onChange={(e) => setStudentInputCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. MM-7842A"
+                  maxLength={10}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-xs font-mono font-bold tracking-wider uppercase bg-white shadow-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleConnectClassroom();
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleConnectClassroom()}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-indigo-600/20 whitespace-nowrap"
+              >
+                <Link className="w-3.5 h-3.5" />
+                <span>Connect Class</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Helper Autofill note for ease of testing */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-[11px] text-slate-500">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Teacher's Active Code:</span>
+              <button
+                type="button"
+                onClick={() => handleConnectClassroom(teacherClassroomCode)}
+                className="font-mono font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                title="Click to autofill and connect"
+              >
+                {teacherClassroomCode} (Click to Auto-Connect)
+              </button>
+            </div>
+            <span className="text-slate-400">Timetable and teacher changes update automatically when connected.</span>
+          </div>
+
+          {connectionMessage && (
+            <div className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+              connectionMessage.type === 'success' 
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                : 'bg-rose-100 text-rose-800 border border-rose-300'
+            }`}>
+              {connectionMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+              <span>{connectionMessage.text}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Active Remedial Intervention Alert Banner */}
       {studentActiveIntervention && (
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 sm:p-5 shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1040,6 +1265,33 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       {studentNavTab === 'learning' && (
         <div className="space-y-6">
           
+          {/* Classroom Broadcast Synchronization Status Banner */}
+          {isClassroomConnected ? (
+            <div className="flex items-center justify-between p-3 px-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl text-xs font-semibold text-emerald-950 shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Broadcasting Live Lesson from Classroom {teacherClassroomCode}: <strong>{lessonPlan.topic}</strong></span>
+              </div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                Live Synced
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 px-4 bg-amber-50/90 border border-amber-200 rounded-2xl text-xs font-semibold text-amber-950 shadow-xs">
+              <div className="flex items-center gap-2">
+                <Lock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                <span>Standalone Self-Study Mode: Enter teacher's classroom code to synchronize live lecture broadcasts.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleConnectClassroom(teacherClassroomCode)}
+                className="text-[10px] bg-amber-200 hover:bg-amber-300 text-amber-900 px-2.5 py-1 rounded-lg font-bold cursor-pointer transition-colors self-start sm:self-auto"
+              >
+                Sync Now ({teacherClassroomCode})
+              </button>
+            </div>
+          )}
+
           {/* 3D Modality Control Deck */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 bg-white rounded-3xl border border-slate-200/90 shadow-md">
             
@@ -1146,41 +1398,439 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               
               <div className="card-3d p-5 sm:p-6 space-y-5">
                 
-                {/* Visual Scientific Diagram */}
-                {(activeLearningMode === 'visual' || activeLearningMode === 'text') && (
-                  <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-100 bg-slate-900 group shadow-md">
-                    <img
-                      src={lessonPlan.visualDiagram?.imageUrl || "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=1200"}
-                      alt="Photosynthesis Concept Diagram"
-                      className="w-full h-56 sm:h-64 object-cover group-hover:scale-105 transition-transform duration-500 opacity-90"
-                    />
-                    <div className="absolute inset-0 bg-slate-950/70 flex flex-col justify-end p-5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-600 text-white uppercase tracking-wider">
-                            Interactive Scientific Concept Model
-                          </span>
-                          <h4 className="text-base sm:text-lg font-bold text-white mt-1 font-outfit">
-                            {studentLanguage === 'Kannada' 
-                              ? 'ದ್ಯುತಿಸಂಶ್ಲೇಷಣೆಯ ರೇಖಾಚಿತ್ರ (Photosynthesis)' 
-                              : (studentLanguage === 'Hindi' ? 'प्रकाश संश्लेषण आरेख (Photosynthesis)' : 'Chloroplast & Stomata Mechanics')}
-                          </h4>
+                {/* VISUAL MODE: 3D Visual Concept Diagram & Quick Access Pill */}
+                {activeLearningMode === 'visual' && (
+                  <div className="space-y-4">
+                    <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-100 bg-slate-900 group shadow-md">
+                      <img
+                        src={lessonPlan.visualDiagram?.imageUrl || "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=1200"}
+                        alt="Photosynthesis Concept Diagram"
+                        className="w-full h-56 sm:h-64 object-cover group-hover:scale-105 transition-transform duration-500 opacity-90"
+                      />
+                      <div className="absolute inset-0 bg-slate-950/70 flex flex-col justify-end p-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-600 text-white uppercase tracking-wider">
+                              Interactive Scientific Concept Model
+                            </span>
+                            <h4 className="text-base sm:text-lg font-bold text-white mt-1 font-outfit">
+                              {studentLanguage === 'Kannada' 
+                                ? 'ದ್ಯುತಿಸಂಶ್ಲೇಷಣೆಯ ರೇಖಾಚಿತ್ರ (Photosynthesis)' 
+                                : (studentLanguage === 'Hindi' ? 'प्रकाश संश्लेषण आरेख (Photosynthesis)' : 'Chloroplast & Stomata Mechanics')}
+                            </h4>
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              const text = studentLanguage === 'Kannada'
+                                ? (lessonPlan.beginnerExplanation.keyAnalogyKannada || lessonPlan.beginnerExplanation.keyAnalogy)
+                                : (studentLanguage === 'Hindi' ? lessonPlan.beginnerExplanation.keyAnalogyHindi : lessonPlan.beginnerExplanation.keyAnalogy);
+                              onSpeakText(text, studentLanguage);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg cursor-pointer transition-colors"
+                            title="Listen to Audio Explanation"
+                          >
+                            <Volume2 className="w-4 h-4 text-white" />
+                          </button>
                         </div>
-                        
-                        <button
-                          onClick={() => {
-                            const text = studentLanguage === 'Kannada'
-                              ? (lessonPlan.beginnerExplanation.keyAnalogyKannada || lessonPlan.beginnerExplanation.keyAnalogy)
-                              : (studentLanguage === 'Hindi' ? lessonPlan.beginnerExplanation.keyAnalogyHindi : lessonPlan.beginnerExplanation.keyAnalogy);
-                            onSpeakText(text, studentLanguage);
-                          }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg cursor-pointer transition-colors"
-                          title="Listen to Audio Explanation"
-                        >
-                          <Volume2 className="w-4 h-4 text-white" />
-                        </button>
                       </div>
                     </div>
+
+                    {/* Source Trust Quick Access Banner */}
+                    <div className="p-3.5 bg-gradient-to-r from-indigo-50 via-sky-50 to-emerald-50 border border-indigo-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                            <span>Teacher's Source Trust Notes & Formulae</span>
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded-full">
+                              {syncedDocs.filter(d => d.status === 'active').length} PDFs Available
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">
+                            Uploaded by your teacher under Source Trust: formulas, stomata mechanics & handouts.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLearningMode('text')}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Open Notes & Formula</span>
+                        </button>
+                        {syncedDocs.filter(d => d.status === 'active').length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDocReader(syncedDocs.filter(d => d.status === 'active')[0])}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1"
+                            title="Quick Read First PDF"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                            <span>Quick Read</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* NOTES & FORMULA MODE: Teacher Uploaded Source Trust PDFs & Formulas Library */}
+                {activeLearningMode === 'text' && (
+                  <div className="space-y-6">
+                    
+                    {/* Header Banner: Source Trust Verification */}
+                    <div className="rounded-2xl bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-5 text-white shadow-md relative overflow-hidden border border-indigo-700/50">
+                      <div className="absolute right-0 top-0 translate-x-8 -translate-y-6 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+                      
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                              Source Trust Grounded (96%–99% Authority)
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              Synced from Teacher Dashboard
+                            </span>
+                          </div>
+                          
+                          <h3 className="text-base sm:text-lg font-extrabold text-white font-outfit flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-indigo-400" />
+                            Teacher's Uploaded PDF Notes & Formulae
+                          </h3>
+                          <p className="text-xs text-slate-300">
+                            Authoritative course handouts, scientific formulas, and NCERT-verified textbook notes uploaded by your teacher.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <span className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 text-xs font-bold text-white whitespace-nowrap">
+                            📄 {syncedDocs.filter(d => d.status === 'active').length} Active Documents
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Live Document Search Input */}
+                      <div className="mt-4 pt-3 border-t border-white/10 relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-6 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={docSearchQuery}
+                          onChange={(e) => setDocSearchQuery(e.target.value)}
+                          placeholder="Search uploaded notes, PDFs, chemical equations, stomata, glucose..."
+                          className="w-full bg-slate-950/70 border border-slate-700/80 focus:border-indigo-400 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-400 outline-none transition-colors"
+                        />
+                        {docSearchQuery && (
+                          <button
+                            onClick={() => setDocSearchQuery('')}
+                            className="absolute right-3 top-6 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Shelf of Uploaded Documents */}
+                    <div className="space-y-4">
+                      {syncedDocs.filter(d => d.status === 'active').filter((d) => {
+                        if (!docSearchQuery.trim()) return true;
+                        const q = docSearchQuery.toLowerCase();
+                        return (
+                          d.title.toLowerCase().includes(q) ||
+                          d.filename.toLowerCase().includes(q) ||
+                          d.summary.toLowerCase().includes(q) ||
+                          (d.extractedSnippet && d.extractedSnippet.toLowerCase().includes(q))
+                        );
+                      }).length === 0 ? (
+                        <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 space-y-2">
+                          <FileText className="w-8 h-8 mx-auto text-slate-300" />
+                          <p className="text-xs font-semibold">No documents match "{docSearchQuery}".</p>
+                          <button
+                            onClick={() => setDocSearchQuery('')}
+                            className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                          >
+                            Reset Search Filter
+                          </button>
+                        </div>
+                      ) : (
+                        syncedDocs.filter(d => d.status === 'active').filter((d) => {
+                          if (!docSearchQuery.trim()) return true;
+                          const q = docSearchQuery.toLowerCase();
+                          return (
+                            d.title.toLowerCase().includes(q) ||
+                            d.filename.toLowerCase().includes(q) ||
+                            d.summary.toLowerCase().includes(q) ||
+                            (d.extractedSnippet && d.extractedSnippet.toLowerCase().includes(q))
+                          );
+                        }).map((doc) => {
+                          const isPdf = doc.filename.toLowerCase().endsWith('.pdf') || doc.type === 'textbook' || doc.type === 'curriculum_guide';
+                          return (
+                            <div
+                              key={doc.id}
+                              className="bg-white rounded-2xl border border-slate-200/90 hover:border-indigo-300 p-4 sm:p-5 shadow-xs hover:shadow-md transition-all space-y-3.5 group"
+                            >
+                              {/* Document Card Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
+                                <div className="flex items-start gap-3">
+                                  <div className={`p-2.5 rounded-xl flex-shrink-0 mt-0.5 ${
+                                    isPdf ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
+                                  }`}>
+                                    <FileText className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                                        isPdf ? 'bg-rose-100 text-rose-800' : 'bg-indigo-100 text-indigo-800'
+                                      }`}>
+                                        {isPdf ? 'PDF Handout' : 'Lecture Notes'}
+                                      </span>
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                                        Version {doc.versionYear}
+                                      </span>
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                        {doc.fileSize || '3.5 MB'}
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-slate-400">
+                                        {doc.uploadDate || 'Just now'}
+                                      </span>
+                                    </div>
+                                    
+                                    <h4 className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 font-outfit leading-tight group-hover:text-indigo-600 transition-colors">
+                                      {doc.title}
+                                    </h4>
+                                    <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                                      {doc.filename}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 self-start">
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1 whitespace-nowrap shadow-2xs">
+                                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>{doc.trustScore}% Ground Truth</span>
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Document Summary */}
+                              <p className="text-xs text-slate-600 leading-relaxed font-normal bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                                {doc.summary}
+                              </p>
+
+                              {/* Extracted Formula & Note Passage Callout */}
+                              {doc.extractedSnippet && (
+                                <div className="p-3.5 rounded-xl bg-slate-900 text-slate-100 border border-slate-800 space-y-1.5 shadow-inner">
+                                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                                    <span className="flex items-center gap-1">
+                                      <Sparkles className="w-3 h-3 text-indigo-400" />
+                                      Extracted Formula & Key Note Passage:
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyFormula(doc.extractedSnippet)}
+                                      className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="Copy passage"
+                                    >
+                                      {copiedFormulaText === doc.extractedSnippet ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-emerald-400" />
+                                          <span className="text-emerald-400">Copied!</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          <span>Copy</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                  <div className="text-xs font-mono text-emerald-300 leading-relaxed font-semibold">
+                                    "{doc.extractedSnippet}"
+                                  </div>
+                                  {doc.citationKey && (
+                                    <div className="text-[10px] text-slate-400 italic text-right pt-0.5">
+                                      Citation: {doc.citationKey}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* PDF Pages Preview Highlights */}
+                              {doc.pdfPages && doc.pdfPages.length > 0 && doc.pdfPages[0]?.keyPoints && (
+                                <div className="space-y-1.5 pt-1">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    Teacher Highlight Points (Page 1 of {doc.pdfPages.length}):
+                                  </span>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                    {doc.pdfPages[0].keyPoints.slice(0, 3).map((pt, ptIdx) => (
+                                      <div key={ptIdx} className="flex items-start gap-1.5 text-slate-700 bg-white p-2 rounded-lg border border-slate-200/80">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                                        <span className="text-[11px] leading-tight font-medium">{pt}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Action Buttons: Read Full PDF, Audio Read, Download */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDocReader(doc)}
+                                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                                  >
+                                    <BookOpen className="w-3.5 h-3.5" />
+                                    <span>Read Full PDF ({doc.pdfPages?.length || 2} Pages)</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const textToRead = `${doc.title}. ${doc.summary}. Key notes: ${doc.extractedSnippet || ''}`;
+                                      onSpeakText(textToRead, studentLanguage);
+                                    }}
+                                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                                    title="Listen to Audio Explanation"
+                                  >
+                                    <Volume2 className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>Listen</span>
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadDoc(doc)}
+                                  className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                                  title="Download File"
+                                >
+                                  <Download className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Download</span>
+                                </button>
+                              </div>
+
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Interactive Scientific Formula & Reaction Mechanics Vault */}
+                    <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
+                            <Sparkles className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-extrabold text-slate-900 font-outfit">
+                              Essential Scientific Formulae & Reaction Mechanics
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Core mathematical stoichiometry & biochemical equations from teacher's verified notes
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                          4 Core Formulas
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        
+                        {/* Formula 1: Photosynthesis Equation */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 text-white space-y-2 border border-slate-800 shadow-xs">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            <span>1. Balanced Photosynthesis Equation</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyFormula('6CO2 + 6H2O + Sunlight -> C6H12O6 + 6O2')}
+                              className="text-slate-400 hover:text-white cursor-pointer"
+                              title="Copy"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="font-mono text-xs font-bold text-emerald-400 bg-slate-950/80 p-2 rounded-lg border border-slate-800 text-center tracking-wide">
+                            6CO₂ + 6H₂O + Sunlight ➔ C₆H₁₂O₆ + 6O₂
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-snug">
+                            6 carbon dioxide + 6 water yield 1 hexose glucose and 6 oxygen gas molecules in chloroplasts.
+                          </p>
+                        </div>
+
+                        {/* Formula 2: Hill Reaction / Photolysis */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 text-white space-y-2 border border-slate-800 shadow-xs">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            <span>2. Photolysis of Water (Hill Reaction)</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyFormula('2H2O -> 4H+ + 4e- + O2')}
+                              className="text-slate-400 hover:text-white cursor-pointer"
+                              title="Copy"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="font-mono text-xs font-bold text-sky-400 bg-slate-950/80 p-2 rounded-lg border border-slate-800 text-center tracking-wide">
+                            2H₂O ➔ 4H⁺ + 4e⁻ + O₂
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-snug">
+                            Solar light photons split water molecules into protons and electrons to reduce NADP⁺ into NADPH.
+                          </p>
+                        </div>
+
+                        {/* Formula 3: Starch Polymerization */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 text-white space-y-2 border border-slate-800 shadow-xs">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            <span>3. Starch Polymerization (Iodine Test)</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyFormula('n(C6H12O6) -> (C6H10O5)n + (n-1)H2O')}
+                              className="text-slate-400 hover:text-white cursor-pointer"
+                              title="Copy"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="font-mono text-xs font-bold text-amber-400 bg-slate-950/80 p-2 rounded-lg border border-slate-800 text-center tracking-wide">
+                            n(C₆H₁₂O₆) ➔ (C₆H₁₀O₅)n + (n-1)H₂O
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-snug">
+                            Glucose is polymerized and stored as insoluble starch; confirmed via blue-black iodine reagent coloration.
+                          </p>
+                        </div>
+
+                        {/* Formula 4: Transpiration & Stomatal Mechanics */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 text-white space-y-2 border border-slate-800 shadow-xs">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            <span>4. Stomatal Gas Exchange Ratio</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyFormula('Transpiration Ratio = H2O Loss (g) / CO2 Assimilated (g)')}
+                              className="text-slate-400 hover:text-white cursor-pointer"
+                              title="Copy"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="font-mono text-xs font-bold text-purple-400 bg-slate-950/80 p-2 rounded-lg border border-slate-800 text-center tracking-wide">
+                            Transpiration Ratio = H₂O Loss / CO₂ Influx
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-snug">
+                            Osmotic guard cell turgor governs the delicate equilibrium between atmospheric CO₂ entry and transpirational water cooling.
+                          </p>
+                        </div>
+
+                      </div>
+                    </div>
+
                   </div>
                 )}
 
@@ -1229,7 +1879,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
                       {/* Bilingual Glossary */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        {lessonPlan.beginnerExplanation.vocabularyGlossary.map((v, i) => (
+                        {(lessonPlan.beginnerExplanation?.vocabularyGlossary || []).map((v, i) => (
                           <div key={i} className="p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
                             <span className="font-bold text-indigo-700">{v.term}</span>
                             <span className="text-xs text-slate-500 ml-1.5">({studentLanguage === 'Kannada' ? (v.kannadaTerm || v.hindiTerm) : (studentLanguage === 'Hindi' ? v.hindiTerm : v.term)})</span>
@@ -1513,7 +2163,58 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
       {/* TAB 3: CALENDAR & PATH */}
       {studentNavTab === 'calendar' && (
-        <CalendarView currentPersona="student" events={calendarEvents} />
+        isClassroomConnected ? (
+          <CalendarView currentPersona="student" events={calendarEvents} />
+        ) : (
+          <div className="card-3d p-8 text-center space-y-5 max-w-2xl mx-auto my-8">
+            <div className="w-16 h-16 rounded-3xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto text-2xl shadow-inner">
+              <Calendar className="w-8 h-8 text-indigo-600" />
+            </div>
+            
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-extrabold text-slate-900 font-outfit">
+                Classroom Timetable & Calendar Disconnected
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
+                Your student calendar is currently isolated from your teacher. Enter the active Classroom Code generated on your teacher's dashboard to load live lectures, lab sessions, and rescheduled classes.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 max-w-md mx-auto pt-2">
+              <input
+                type="text"
+                value={studentInputCode}
+                onChange={(e) => setStudentInputCode(e.target.value.toUpperCase())}
+                placeholder="Enter Code (e.g. MM-7842A)"
+                maxLength={10}
+                className="w-full sm:w-60 px-4 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-500 text-xs font-mono font-bold tracking-widest uppercase bg-white shadow-xs text-center sm:text-left"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleConnectClassroom();
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => handleConnectClassroom()}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-indigo-600/20"
+              >
+                <Link className="w-4 h-4" />
+                <span>Sync Calendar</span>
+              </button>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-500">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Active Teacher Code:</span>
+              <button
+                type="button"
+                onClick={() => handleConnectClassroom(teacherClassroomCode)}
+                className="font-mono font-bold text-indigo-600 hover:underline cursor-pointer"
+              >
+                {teacherClassroomCode} (Click to Connect Now)
+              </button>
+            </div>
+          </div>
+        )
       )}
 
       {/* TAB 3: ASSESSMENTS TELEMETRY */}
@@ -1695,6 +2396,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Full-featured PDF Document Reader Modal */}
+      <DocumentReaderModal
+        isOpen={isReaderModalOpen}
+        onClose={() => setIsReaderModalOpen(false)}
+        document={readerDoc}
+      />
 
     </div>
   );

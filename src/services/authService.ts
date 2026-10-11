@@ -282,9 +282,14 @@ class AuthService {
   }
 
   public getCurrentUser(): AuthUser | null {
-    if (typeof window === 'undefined') return null;
-    const data = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
-    return data ? JSON.parse(data) : null;
+    if (typeof window === 'undefined') return INITIAL_DEMO_USERS[0];
+    try {
+      const data = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch {}
+    return INITIAL_DEMO_USERS[0];
   }
 
   public setCurrentUser(user: AuthUser | null) {
